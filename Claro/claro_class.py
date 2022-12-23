@@ -30,6 +30,7 @@ class Single():
                       'intercept': None,
                       'transition point (Linear)': None
                      }
+
         self.fit_guess  = [ self.height, self.t_point, self.width ]
 
 
@@ -38,20 +39,23 @@ class Single():
     # linear fit method
     def fit_lin(self):
         # vector parsing (allows for base and saturation values to be different than 0 and 1000)
-        xInt = self.x
-        yInt = self.y
-        while(yInt[0]==yInt[1]):
-            xInt=np.delete(xInt,0)
-            yInt = np.delete(yInt,0)
-        while (yInt[-1]==yInt[-2]):
-            xInt=np.delete(xInt,-1)
-            yInt = np.delete(yInt,-1)
+        x_int = self.x
+        y_int = self.y
+        while(y_int[0]==y_int[1]):
+            x_int=np.delete(x_int,0)
+            y_int = np.delete(y_int,0)
+        while (y_int[-1]==y_int[-2]):
+            x_int=np.delete(x_int,-1)
+            y_int = np.delete(y_int,-1)
+        self.x_int = x_int
+        self.y_int = y_int
+        
 
         # linear regression
-        model = stats.linregress(xInt,yInt)
+        model = stats.linregress(x_int,y_int)
 
         # transition point evaluation
-        halfMaximum = (yInt[-1] - yInt[0])/2
+        halfMaximum = (y_int[-1] - y_int[0])/2
         transLin = (halfMaximum - model.intercept)/model.slope
 
         # saving the values
@@ -80,12 +84,29 @@ class Single():
             print(key, ': ', value)
         for key, value in self.fit_lin().items():
             print(key, ': ', value)
-
+        
 
 
     # plotter method
     def plotter(self):
-        pass
+        x = self.x
+        y = self.y
+        x_int = self.x_int
+        lin_intercept =self.fit_lin().get('intercept')
+        lin_slope = self.fit_lin().get('slope')
+        lin_y = lin_slope*x_int + lin_intercept
+        erf_x = self.fit_erf()[0]
+        erf_y = self.fit_erf()[1]
+
+        plt.plot(x, y, linestyle = 'none', color = 'black', marker ='o')
+        plt.plot(x_int, lin_y, color = 'green')
+        plt.plot(erf_x, erf_y, color = 'blue')
+
+        plt.grid("on")
+        plt.xlabel("ADC (arb. units)")
+        plt.ylabel("Counts")
+        plt.show()
+        
 
 
 

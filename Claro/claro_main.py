@@ -27,5 +27,7 @@ if hardcoded != True:
 prova = cl.Single(path)
 prova.fit_erf()
 prova.printData()
+prova.plotter()
+
 
 
