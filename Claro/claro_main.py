@@ -1,15 +1,16 @@
 import claro_class as cl
-import numpy as np
 import pandas as pd
 import os
+import re
 import fnmatch
 import sys
-import matplotlib.pyplot as plt
+
 
 
 # Leave hardcoded = true to test the program on a single file, just for now
 hardcoded = True
-path = r'C:\Users\jacop\Desktop\OOP\Ch_7_offset_0_Chip_004.txt'
+path = r'C:\Users\jacop\Desktop\OOP\OOP_Project\Claro\Ch_7_offset_0_Chip_004.txt'
+
 
 if hardcoded != True:
     # check if path has been given
