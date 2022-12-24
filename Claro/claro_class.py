@@ -19,15 +19,9 @@ class Single():
         self.width = np.abs(data[2][0])
         self.x = data.iloc[2:,0].to_numpy()
         self.y = data.iloc[2:,1].to_numpy()
-
-        
-        self._metadata ={'path': self.path,
-                         'amplitude': self.height,
-                         'transition point': self.t_point,
-                         'width': self.width,
-                        }
-
-        self.fit_guess  = [ self.height, self.t_point, self.width ]
+        self._metadata ={'path': self.path, 'amplitude': self.height,
+                         'transition point': self.t_point, 'width': self.width}
+        self.fit_guess = [ self.height, self.t_point, self.width ]
 
 
     # Method to retrieve Station, Chip and Channel number
@@ -40,9 +34,9 @@ class Single():
             _station = '?'
 
         _fileinfo ={'station' : _station,
-                         'chip' : _chip,
-                         'channel' : _channel
-                    }
+                    'chip' : _chip,
+                    'channel' : _channel
+                   }
         return _fileinfo
 
 
@@ -116,37 +110,63 @@ class Single():
 
 
     # plotter method
-    def plotter(self, scatter = True, show_lin = True, show_erf = True, t_lin = True, t_erf = True):
+    def plotter(self, scatter = True, show_lin = True, show_erf = True, saveplot = False):
 
         # retrieving the data to be plotted
         fileinfo = self.__get_fileinfo(self.path)
+        meta = self._metadata
         x = self.x
         y = self.y
+        half_max = self.half_max
         x_int = self.x_int
         lin_intercept =self.fit_lin().get('intercept')
         lin_slope = self.fit_lin().get('slope')
         lin_y = lin_slope*x_int + lin_intercept
+        t_lin = self.trans_lin
         erf_x = self.erf_x
         erf_y = self.erf_y
+        t_erf = self.erf_params['transition point (erf)'][0]
+        t_erf_std = self.erf_params['transition point (erf)'][1]
+        w_erf = self.erf_params['width'][0]
+        w_erf_std = self.erf_params['width'][1]
 
         # plot options
         fig, ax = plt.subplots()
-        fig.suptitle(f"Fit CLARO: Station {fileinfo['station']}, Chip {fileinfo['chip']}, Channel {fileinfo['channel']}")
-        #ax.errorbar(x, y, y_err, marker = '.', label = 'Data', zorder = 1)
+        fig.suptitle(f"Fit Claro: Station {fileinfo['station']}, Chip {fileinfo['chip']}, Channel {fileinfo['channel']}")
         ax.set_xlabel("ADC")
         ax.set_ylabel("Counts")
+        ax.grid("on")
 
-        # plotting based on arguments
+        # plotting based on arguments (default all True)
         if scatter == True:
-            plt.scatter(x, y, color = 'black', marker ='o')
-        plt.plot(x_int, lin_y, color = 'green')
-        plt.plot(erf_x, erf_y, color = 'blue')
+            ax.scatter(x, y, color = 'black', marker ='.')
+            ax.annotate(f"From data file:\nTransition point = {meta['transition point']:.2f}\n"
+                         +f"Width = {meta['width']:.2f}",
+                         xy=(0.025, .975), xycoords='axes fraction',
+                         verticalalignment='top', color='black', alpha=0.8)
 
-        plt.grid("on")
-        plt.show()
+        if show_lin == True:
+            ax.plot(x_int, lin_y, color = 'green')
+            ax.scatter(t_lin , half_max, color = 'green' , marker = 'o')
+            ax.annotate(f"From linear interp.:\nTransition point = {t_lin:.2f}\n",
+                         xy=(0.025, .750), xycoords='axes fraction',
+                         verticalalignment='top', color='green', alpha=0.8)
+
+        if show_erf == True:
+            ax.plot(erf_x, erf_y, color = 'blue')
+            ax.scatter(t_erf , half_max, color = 'blue' , marker = 's')
+            ax.annotate(f"From erf fit:\nTransition point = {t_erf:.2f} $\pm$ {t_erf_std:.2f}\n"
+                         +f"Width = {w_erf:.2f} $\pm$ {w_erf_std:.2f}\n",
+                         xy=(0.025, .6), xycoords='axes fraction',
+                         verticalalignment='top', color='blue', alpha=0.8)
         
+        # plot saving (default False)
+        if saveplot == True:
+            plotname = f"Claro_Chip{fileinfo['chip']}_Ch{fileinfo['channel']}"
+            plt.savefig(plotname, bbox_inches='tight')
+            print("Plot saved in the current directory")
 
-
+        plt.show()
 
 
 
