@@ -1,9 +1,12 @@
 import os
 import re
+import fnmatch
 import pandas as pd
 import numpy as np
 from scipy import optimize , special , stats
 import matplotlib.pyplot as plt
+
+"""Single and multiple file analyzer share some static methods, so they must go together"""
 
 ###############################################################################
 #                                Single file analyzer                         #
@@ -22,22 +25,6 @@ class Single():
         self._metadata ={'path': self.path, 'amplitude': self.height,
                          'transition point': self.t_point, 'width': self.width}
         self.fit_guess = [ self.height, self.t_point, self.width ]
-
-
-    # Method to retrieve Station, Chip and Channel number
-    def __get_fileinfo(self,path):
-        try:
-            _chip = re.search('Chip_(.+?).txt' , path).group(1)
-            _channel = re.search('Ch_(.+?)_' , path).group(1)
-            _station = re.search('\Station_(.+?)__' , path).group(1)
-        except AttributeError:
-            _station = '?'
-
-        _fileinfo ={'station' : _station,
-                    'chip' : _chip,
-                    'channel' : _channel
-                   }
-        return _fileinfo
 
 
 
@@ -113,7 +100,7 @@ class Single():
     def plotter(self, scatter = True, show_lin = True, show_erf = True, saveplot = False):
 
         # retrieving the data to be plotted
-        fileinfo = self.__get_fileinfo(self.path)
+        fileinfo = Claro._get_fileinfo(self.path)
         meta = self._metadata
         x = self.x
         y = self.y
@@ -169,6 +156,8 @@ class Single():
         plt.show()
 
 
+##############################################################################################################################################################
+
 
 ###############################################################################
 #                                Directory analyzer                           #
@@ -176,6 +165,38 @@ class Single():
 
 class Claro():
 
+    # Constructor definition
+    def __init__(self, path):
+        self.path = path
+
+
+
+    # Directory walker method
+    def dir_walker(self):
+        top = self.path
+        name_to_match= '*Station*_Summary/Chip_*/S_curve/Ch_?_offset_?_Chip_00?.txt'
+
+        __path_list = []
+        for root, dirs, files in os.walk(top):
+            for file in files:
+                full_path = os.path.join(root, file)
+                if fnmatch.fnmatch(full_path,name_to_match):
+                    __path_list.append(full_path)
+
+        with open(r".\filelist.txt", 'w') as outfile:
+            outfile.write('\n'.join(__path_list))
+        print(fr"List of files to analyze created as {os.getcwd()}\filelist.txt")
+
+
+
+
+
+    # Dir list reader method
+    def list_reader(self):
+        pass
+
+
+    
     ######################################################################
     #           Mathematical functions and other static methods          #
     ######################################################################
@@ -187,3 +208,20 @@ class Claro():
         """
         return (height/2)*(1+special.erf((x-a)/(b/2*np.sqrt(2))))
         
+
+    @staticmethod
+    def _get_fileinfo(path):
+        """Retrieves Station chip and channel number from the path"""
+
+        try:
+            _chip = re.search('Chip_(.+?).txt' , path).group(1)
+            _channel = re.search('Ch_(.+?)_' , path).group(1)
+            _station = re.search('\Station_(.+?)__' , path).group(1)
+        except AttributeError:
+            _station = '?'
+
+        _fileinfo ={'station' : _station,
+                    'chip' : _chip,
+                    'channel' : _channel
+                   }
+        return _fileinfo
