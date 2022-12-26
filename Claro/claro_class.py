@@ -6,6 +6,7 @@ import numpy as np
 from scipy import optimize , special , stats
 import matplotlib.pyplot as plt
 
+
 """Single and multiple file analyzer share some static methods, so they must go together"""
 
 ###############################################################################
@@ -149,9 +150,9 @@ class Single():
         
         # plot saving (default False)
         if saveplot == True:
-            plotname = f"Claro_Chip{fileinfo['chip']}_Ch{fileinfo['channel']}"
+            plotname = f"Plot_Claro_Chip{fileinfo['chip']}_Ch{fileinfo['channel']}.png"
             plt.savefig(plotname, bbox_inches='tight')
-            print("Plot saved in the current directory")
+            print(f"Plot saved as {os.getcwd()}\{plotname}")
 
         plt.show()
 
@@ -168,33 +169,69 @@ class Claro():
     # Constructor definition
     def __init__(self, path):
         self.path = path
+        self.__file_list = []
 
 
 
     # Directory walker method
     def dir_walker(self):
         top = self.path
-        name_to_match= '*Station*_Summary/Chip_*/S_curve/Ch_?_offset_?_Chip_00?.txt'
-
-        __path_list = []
+        name_to_match= '*Station*_Summary/Chip_*/S_curve/Ch_*_offset_*_Chip_*.txt'
+        file_list = []
+        
         for root, dirs, files in os.walk(top):
             for file in files:
                 full_path = os.path.join(root, file)
                 if fnmatch.fnmatch(full_path,name_to_match):
-                    __path_list.append(full_path)
+                    file_list.append(full_path)
 
-        with open(r".\filelist.txt", 'w') as outfile:
-            outfile.write('\n'.join(__path_list))
-        print(fr"List of files to analyze created as {os.getcwd()}\filelist.txt")
+        with open(r".\claro_allfiles.txt", 'w') as outfile:
+            outfile.write('\n'.join(file_list))
+        print(f"found {len(file_list)} files to read...")    
+        print(fr"list of files to analyze created as {os.getcwd()}\claro_allfiles.txt")
+        self.__file_list = file_list
+        return self.__file_list
 
 
 
-
-
-    # Dir list reader method
+    # Directory list reader method
     def list_reader(self):
-        pass
+        list = self.path
+        with open(list,'r') as all_files:
+            file_list = all_files.readlines()
+        self.__file_list = file_list
+        return self.__file_list
+    
+    
 
+    # List analyzer method
+    def analyzer(self):
+        list = self.__file_list
+        goodfiles = []
+        badfiles = []
+
+        # split good and bad files and write them to files
+        for idx, element in enumerate(list):
+            chip_name = element.strip('\n')
+            with open( chip_name, 'r') as chip:
+                if re.search('[a-zA-Z]', chip.readline()):
+                    badfiles.append(chip_name)
+                    continue
+                goodfiles.append(chip_name)
+            Claro.progress_bar(idx+1 , len(list))
+        
+        print(f"found {len(badfiles)} corrupted files")    
+        print(fr"list of bad files created as {os.getcwd()}\claro_badfiles.txt")
+        with open(r".\claro_badfiles.txt", 'w') as outfile:
+            outfile.write('\n'.join(badfiles))        
+
+        print(f"found {len(goodfiles)} good files")    
+        print(fr"list of good files created as {os.getcwd()}\claro_goodfiles.txt")    
+        with open(r".\claro_goodfiles.txt", 'w') as outfile:
+            outfile.write('\n'.join(goodfiles))        
+    
+
+        
 
     
     ######################################################################
@@ -208,6 +245,7 @@ class Claro():
         """
         return (height/2)*(1+special.erf((x-a)/(b/2*np.sqrt(2))))
         
+
 
     @staticmethod
     def _get_fileinfo(path):
@@ -225,3 +263,13 @@ class Claro():
                     'channel' : _channel
                    }
         return _fileinfo
+
+
+
+    @staticmethod
+    def progress_bar(progress, total):
+        """ Provides a visual progress bar on the terminal"""
+        
+        percent = 100 * (progress/float(total))
+        bar ='%' * int(percent) + '-' * (100 - int(percent))
+        print (f"\r|{bar} | {percent:.2f}%" , end="\r")
