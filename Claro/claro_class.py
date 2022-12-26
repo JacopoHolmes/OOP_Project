@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from scipy import optimize , special , stats
 import matplotlib.pyplot as plt
+import csv
 
 
 """Single and multiple file analyzer share some static methods, so they must go together"""
@@ -17,15 +18,14 @@ class Single():
     # Constructor definition
     def __init__(self, path):
         self.path = path
-        data = pd.read_csv(self.path, sep='\t', header=None, skiprows=None)
-        self.height= data[0][0]
-        self.t_point = data[1][0]
-        self.width = np.abs(data[2][0])
-        self.x = data.iloc[2:,0].to_numpy()
-        self.y = data.iloc[2:,1].to_numpy()
-        self._metadata ={'path': self.path, 'amplitude': self.height,
-                         'transition point': self.t_point, 'width': self.width}
-        self.fit_guess = [ self.height, self.t_point, self.width ]
+        data = Claro._get_data(path)
+        self.height = data['height']
+        self.t_point = data['t_point']
+        self.width = data['width']
+        self.x = data['x']
+        self.y = data['y']
+        self._metadata = data['meta']
+        self.fit_guess = data['fit_guess']
 
 
 
@@ -207,31 +207,76 @@ class Claro():
     # List analyzer method
     def analyzer(self):
         list = self.__file_list
-        goodfiles = []
-        badfiles = []
+        _goodfiles = []
+        _badfiles = []
 
         # split good and bad files and write them to files
         for idx, element in enumerate(list):
             chip_name = element.strip('\n')
             with open( chip_name, 'r') as chip:
                 if re.search('[a-zA-Z]', chip.readline()):
-                    badfiles.append(chip_name)
+                    _badfiles.append(chip_name)
                     continue
-                goodfiles.append(chip_name)
+                _goodfiles.append(chip_name)
             Claro.progress_bar(idx+1 , len(list))
         
-        print(f"found {len(badfiles)} corrupted files")    
+        print(f"found {len(_badfiles)} bad files")    
         print(fr"list of bad files created as {os.getcwd()}\claro_badfiles.txt")
         with open(r".\claro_badfiles.txt", 'w') as outfile:
-            outfile.write('\n'.join(badfiles))        
+            outfile.write('\n'.join(_badfiles))        
 
-        print(f"found {len(goodfiles)} good files")    
+        print(f"found {len(_goodfiles)} good files")    
         print(fr"list of good files created as {os.getcwd()}\claro_goodfiles.txt")    
         with open(r".\claro_goodfiles.txt", 'w') as outfile:
-            outfile.write('\n'.join(goodfiles))        
+            outfile.write('\n'.join(_goodfiles))        
     
+        # read data and evaluate erf t.point from good files
+        print("processing the good files...")
 
-        
+        with open(r'.\processed_chips.txt', 'w') as processed:
+            processed.write("Station\tChip\tChannel\tAmplitude\tTr. Point\tWidth\terf_tr.point\tStd_erf_tr.point\n")
+            
+        for idx, file in enumerate(_goodfiles):
+            chip_name = file.strip('\n')
+            with open( chip_name , 'r') as chip:
+
+                # get data
+                data = Claro._get_data(chip_name)
+                info = Claro._get_fileinfo(chip_name)
+                all_data = info | data['meta']
+
+                # evaluate erf t. point  FIXA I COVAR ERROR!!!
+                def fit_erf(self):
+                    function = Claro.modified_erf
+                    x = data['x']
+                    y = data['y']
+
+                    self.x = x
+                    self.y = y
+                    params, covar = optimize.curve_fit(function, x, y, data['fit_guess'])
+
+                    erf_fit_x = np.linspace(self.x.min(), self.x.max(), 100)
+                    erf_fit_y= function(erf_fit_x , *params)
+                    self.erf_x = erf_fit_x
+                    self.erf_y = erf_fit_y
+                    std = np.sqrt(np.diag(covar))
+                        
+                    t_erf = [params[1], std[1]]
+                    return t_erf
+
+                t_erf = fit_erf(self)
+                all_data['t_erf'] = t_erf[0]
+                all_data['std_t_erf'] = t_erf[1]
+
+
+                # write data to file
+                with open(r'.\processed_chips.txt', 'a') as processed:
+                    del all_data['path']
+                    values = all_data.values()
+                    [processed.write('{}\t'.format(value)) for value in all_data.values()]
+                    processed.write('\n')
+                    Claro.progress_bar(idx+1 , len(_goodfiles))
+
 
     
     ######################################################################
@@ -252,9 +297,9 @@ class Claro():
         """Retrieves Station chip and channel number from the path"""
 
         try:
-            _chip = re.search('Chip_(.+?).txt' , path).group(1)
-            _channel = re.search('Ch_(.+?)_' , path).group(1)
-            _station = re.search('\Station_(.+?)__' , path).group(1)
+            _chip = re.search('.+Chip_(.+?).txt' , path).group(1)
+            _channel = re.search('.+Ch_(.+?)_.+' , path).group(1)
+            _station = re.search('.+\Station_1__(.+?)_Summary.+' , path).group(1)
         except AttributeError:
             _station = '?'
 
@@ -264,7 +309,22 @@ class Claro():
                    }
         return _fileinfo
 
+    @staticmethod
+    def _get_data(path):
+        data = pd.read_csv(path, sep='\t', header=None, skiprows=None)
+        height= data[0][0]
+        t_point = data[1][0]
+        width = np.abs(data[2][0])
+        x = data.iloc[2:,0].to_numpy()
+        y = data.iloc[2:,1].to_numpy()
+        _metadata ={'path': path, 'amplitude': height,
+                    'transition point': t_point, 'width': width}
+        fit_guess = [ height, t_point, width ]
 
+        all_data ={'height' : height, 't_point' : t_point,
+                    'width' : width, 'x' : x , 'y' : y,
+                    'meta' : _metadata , 'fit_guess' : fit_guess}
+        return all_data
 
     @staticmethod
     def progress_bar(progress, total):
