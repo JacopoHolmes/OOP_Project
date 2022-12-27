@@ -15,7 +15,7 @@ def isSingle(path):
 hardcoded = True
 #path = r'C:\Users\jacop\Desktop\OOP\OOP_Project\Claro\Ch_7_offset_0_Chip_004.txt'
 #path = r'C:\Users\jacop\Desktop\OOP\secondolotto_1'
-path = r'C:\Users\jacop\Desktop\OOP\claro_allfiles.txt'
+path = r'C:\Users\jacop\Desktop\OOP\OOP_Project\Claro\claro_allfiles.txt'
 
 if hardcoded != True:
     # check if path has been given
@@ -34,7 +34,7 @@ if isSingle(path):
     single.fit_erf()
     single.printData()
     single.plotter() # default arguments: (scatter = True, show_lin = True, show_erf = True, saveplot = False)
-    sys.exit(0)
+    sys.exit(0)      # the program ends here if given a single file
     
 elif os.path.isdir(path):
     print (f'Provided a directory, analyzing...\n')
@@ -46,5 +46,8 @@ else:
     multi = cl.Claro(path)
     multi.list_reader()
 
-multi.analyzer()
+# read and store all the useful data
+multi.analyzer()    # default arguments: (discard_unfit = True)
 
+# create the histograms
+multi.histograms()  # default arguments: (saveplot = True)

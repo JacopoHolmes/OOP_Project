@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from scipy import optimize , special , stats
 import matplotlib.pyplot as plt
-import csv
+import warnings
 
 
 """Single and multiple file analyzer share some static methods, so they must go together"""
@@ -65,15 +65,18 @@ class Single():
         function = Claro.modified_erf
         x = self.x
         y = self.y
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message='Covariance of the parameters could not be estimated')
+            params, covar = optimize.curve_fit(function, x, y, self.fit_guess)
 
-        params, covar = optimize.curve_fit(function, x, y, self.fit_guess)
-
-        erf_fit_x = np.linspace(self.x.min(), self.x.max(), 100)
-        erf_fit_y= function(erf_fit_x , *params)
-        self.erf_x = erf_fit_x
-        self.erf_y = erf_fit_y
-        std = np.sqrt(np.diag(covar))
+            erf_fit_x = np.linspace(self.x.min(), self.x.max(), 100)
+            erf_fit_y= function(erf_fit_x , *params)
+            self.erf_x = erf_fit_x
+            self.erf_y = erf_fit_y
+            std = np.sqrt(np.diag(covar))
         
+        if np.isinf(std[1]) or np.isnan(std[1]):
+            std[1] = 0
         self.erf_params = {
                 'height' : [params[0], std[0]],
                 'transition point (erf)' : [params[1], std[1]],
@@ -93,6 +96,8 @@ class Single():
             print(key, ': ', value)
         for key, value in self.fit_erf().items():
             print(key, ': ', value)
+        if self.fit_erf()['transition point (erf)'][1] == 0:
+            print ("the fit did not converge, std set to 0.")
         print ('\n')
         
 
@@ -205,10 +210,20 @@ class Claro():
     
 
     # List analyzer method
-    def analyzer(self):
+    def analyzer(self , discard_unfit = True):
+        """ Reads file info and data and store them into files.
+            If discard_unfit = True  separates all the files that didn't converge; otherwise put their tr. point std to 0"""
+
+        if discard_unfit == True :
+            with open(r'.\claro_unfit_chips.txt' , 'w') as create_unfit: pass
+
         list = self.__file_list
         _goodfiles = []
         _badfiles = []
+        _t_list = []
+        _erf_t_list = []
+        _erf_t_std = []
+
 
         # split good and bad files and write them to files
         for idx, element in enumerate(list):
@@ -220,6 +235,7 @@ class Claro():
                 _goodfiles.append(chip_name)
             Claro.progress_bar(idx+1 , len(list))
         
+        print('\n')
         print(f"found {len(_badfiles)} bad files")    
         print(fr"list of bad files created as {os.getcwd()}\claro_badfiles.txt")
         with open(r".\claro_badfiles.txt", 'w') as outfile:
@@ -233,7 +249,7 @@ class Claro():
         # read data and evaluate erf t.point from good files
         print("processing the good files...")
 
-        with open(r'.\processed_chips.txt', 'w') as processed:
+        with open(r'.\claro_processed_chips.txt', 'w') as processed:
             processed.write("Station\tChip\tChannel\tAmplitude\tTr. Point\tWidth\terf_tr.point\tStd_erf_tr.point\n")
             
         for idx, file in enumerate(_goodfiles):
@@ -245,22 +261,24 @@ class Claro():
                 info = Claro._get_fileinfo(chip_name)
                 all_data = info | data['meta']
 
-                # evaluate erf t. point  FIXA I COVAR ERROR!!!
+                # evaluate erf t. point
                 def fit_erf(self):
                     function = Claro.modified_erf
                     x = data['x']
                     y = data['y']
 
-                    self.x = x
-                    self.y = y
-                    params, covar = optimize.curve_fit(function, x, y, data['fit_guess'])
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("ignore", message='Covariance of the parameters could not be estimated')
+                        warnings.filterwarnings("ignore", message ='invalid value encountered in sqrt')
 
-                    erf_fit_x = np.linspace(self.x.min(), self.x.max(), 100)
-                    erf_fit_y= function(erf_fit_x , *params)
-                    self.erf_x = erf_fit_x
-                    self.erf_y = erf_fit_y
-                    std = np.sqrt(np.diag(covar))
-                        
+                        params, covar = optimize.curve_fit(function, x, y, data['fit_guess'])
+                        erf_fit_x = np.linspace(x.min(), x.max(), 100)
+                        erf_fit_y= function(erf_fit_x , *params)
+                        std = np.sqrt(np.diag(covar))
+                    
+                    if np.isinf(std[1]) or np.isnan(std[1]):
+                        std[1] = 0
+
                     t_erf = [params[1], std[1]]
                     return t_erf
 
@@ -268,15 +286,40 @@ class Claro():
                 all_data['t_erf'] = t_erf[0]
                 all_data['std_t_erf'] = t_erf[1]
 
-
+                _t_list.append(all_data['transition point'])
+                _erf_t_list.append(all_data['t_erf'])
+                _erf_t_std.append(all_data['std_t_erf'])
+                self._t_list = _t_list
+                self._erf_t_list = _erf_t_list
+                self._erf_t_std = _erf_t_std
                 # write data to file
-                with open(r'.\processed_chips.txt', 'a') as processed:
+                if discard_unfit == True:
+                    if t_erf[1] == 0:
+                        with open(r'.\claro_unfit_chips.txt' , 'a') as unfit:
+                            unfit.write('{}\n'.format(all_data['path']))
+                            continue
+  
+
+                with open(r'.\claro_processed_chips.txt', 'a') as processed:
                     del all_data['path']
                     values = all_data.values()
                     [processed.write('{}\t'.format(value)) for value in all_data.values()]
                     processed.write('\n')
                     Claro.progress_bar(idx+1 , len(_goodfiles))
+        
+        print('\n')            
+        print(fr"result stored in {os.getcwd()}\claro_processed_chips.txt")
+        if discard_unfit == True :print(fr"list of unfit files created as {os.getcwd()}\claro_unfit_chips.txt")
+    
 
+
+    # histogram maker method
+    def histograms(self, saveplot = True):
+        t = self._t_list
+        plt.hist(t , bins = 200)
+        plt.show()
+        
+        pass
 
     
     ######################################################################
@@ -330,6 +373,7 @@ class Claro():
     def progress_bar(progress, total):
         """ Provides a visual progress bar on the terminal"""
         
-        percent = 100 * (progress/float(total))
+        percent = int(100 * (progress/float(total)))
         bar ='%' * int(percent) + '-' * (100 - int(percent))
         print (f"\r|{bar} | {percent:.2f}%" , end="\r")
+        
