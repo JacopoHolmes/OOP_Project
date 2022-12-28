@@ -222,7 +222,6 @@ class Claro():
         _badfiles = []
         _t_list = []
         _erf_t_list = []
-        _erf_t_std = []
 
 
         # split good and bad files and write them to files
@@ -288,10 +287,8 @@ class Claro():
 
                 _t_list.append(all_data['transition point'])
                 _erf_t_list.append(all_data['t_erf'])
-                _erf_t_std.append(all_data['std_t_erf'])
                 self._t_list = _t_list
                 self._erf_t_list = _erf_t_list
-                self._erf_t_std = _erf_t_std
                 # write data to file
                 if discard_unfit == True:
                     if t_erf[1] == 0:
@@ -308,18 +305,40 @@ class Claro():
                     Claro.progress_bar(idx+1 , len(_goodfiles))
         
         print('\n')            
-        print(fr"result stored in {os.getcwd()}\claro_processed_chips.txt")
+        print(fr"results stored in {os.getcwd()}\claro_processed_chips.txt")
         if discard_unfit == True :print(fr"list of unfit files created as {os.getcwd()}\claro_unfit_chips.txt")
     
 
 
     # histogram maker method
     def histograms(self, saveplot = True):
-        t = self._t_list
-        plt.hist(t , bins = 200)
+        t = np.array(self._t_list)
+        erf_list = np.array(self._erf_t_list)
+        discrepancy = t-erf_list
+
+        # plot options
+        fig , axs = plt.subplots(3)
+        fig.suptitle("Histogram of the transition points distribution")
+
+        axs[0].hist(t , bins = 200)
+        axs[1].hist(erf_list , bins = 200)
+        axs[2].hist(discrepancy , bins = 50 , range = (-1e-6 , 1e-6 ))
+
+        axs[0].set_title("Read T. point")
+        axs[1].set_title("Erf T. point")
+        axs[2].set_title("Discrepancy")
+        plt.subplots_adjust(left = 0.133 , bottom = 0.11 , 
+                            right = 0.91 , top = 0.88 , 
+                            wspace = 0.08 , hspace = 0.558)
+
+        if saveplot == True:
+            plotname = f"Histogram_transition_points.png"
+            plt.savefig(plotname, bbox_inches='tight')
+            print(f"Plot saved as {os.getcwd()}\{plotname}")
+
         plt.show()
-        
-        pass
+
+
 
     
     ######################################################################
