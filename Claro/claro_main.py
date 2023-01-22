@@ -14,7 +14,7 @@ If given a list of files, reads it and analyzes them, creating an output data sh
 
 # function to check if the input is a single claro file
 def isSingle(path):
-        singlename = "*Ch_?_offset_?_Chip_00?*"
+        singlename = "*Ch_?_offset_?_Chip_???*"
         return fnmatch.fnmatch(path, singlename) #bool
 
 

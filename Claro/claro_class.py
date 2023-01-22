@@ -67,7 +67,7 @@ class Single():
         y = self.y
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message='Covariance of the parameters could not be estimated')
-            params, covar = optimize.curve_fit(function, x, y, self.fit_guess)
+            params, covar = optimize.curve_fit(function, x , y , self.fit_guess , maxfev=10000)
 
             erf_fit_x = np.linspace(self.x.min(), self.x.max(), 100)
             erf_fit_y= function(erf_fit_x , *params)
@@ -76,7 +76,9 @@ class Single():
             std = np.sqrt(np.diag(covar))
         
         if np.isinf(std[1]) or np.isnan(std[1]):
-            std[1] = 0
+            std[0] = np.nan
+            std[1] = np.nan
+            std[2] = np.nan
         self.erf_params = {
                 'height' : [params[0], std[0]],
                 'transition point (erf)' : [params[1], std[1]],
@@ -186,8 +188,8 @@ class Claro():
         
         for root, dirs, files in os.walk(top):
             for file in files:
-                full_path = os.path.join(root, file)
-                if fnmatch.fnmatch(full_path,name_to_match):
+                full_path = os.path.join(root , file)
+                if fnmatch.fnmatch(full_path , name_to_match):
                     file_list.append(full_path)
 
         with open(r".\claro_allfiles.txt", 'w') as outfile:
@@ -270,7 +272,7 @@ class Claro():
                         warnings.filterwarnings("ignore", message='Covariance of the parameters could not be estimated')
                         warnings.filterwarnings("ignore", message ='invalid value encountered in sqrt')
 
-                        params, covar = optimize.curve_fit(function, x, y, data['fit_guess'])
+                        params, covar = optimize.curve_fit(function, x , y , data['fit_guess'] , maxfev=1000)
                         erf_fit_x = np.linspace(x.min(), x.max(), 100)
                         erf_fit_y= function(erf_fit_x , *params)
                         std = np.sqrt(np.diag(covar))
@@ -319,10 +321,11 @@ class Claro():
         # plot options
         fig , axs = plt.subplots(3)
         fig.suptitle("Histogram of the transition points distribution")
+        [ax.grid("on") for ax in axs]
 
-        axs[0].hist(t , bins = 200)
-        axs[1].hist(erf_list , bins = 200)
-        axs[2].hist(discrepancy , bins = 50 , range = (-1e-6 , 1e-6 ))
+        axs[0].hist(t , bins = 200 , color ='green')
+        axs[1].hist(erf_list , bins = 200 , color = 'blue')
+        axs[2].hist(discrepancy , bins = 10 , range = (-1e-6 , 1e-6 ))  ## Cambia bins a 10
 
         axs[0].set_title("Read T. point")
         axs[1].set_title("Erf T. point")
@@ -381,7 +384,7 @@ class Claro():
         y = data.iloc[2:,1].to_numpy()
         _metadata ={'path': path, 'amplitude': height,
                     'transition point': t_point, 'width': width}
-        fit_guess = [ height, t_point, width ]
+        fit_guess = [ height, t_point, width ]    
 
         all_data ={'height' : height, 't_point' : t_point,
                     'width' : width, 'x' : x , 'y' : y,
@@ -395,4 +398,3 @@ class Claro():
         percent = int(100 * (progress/float(total)))
         bar ='%' * int(percent) + '-' * (100 - int(percent))
         print (f"\r|{bar} | {percent:.2f}%" , end="\r")
-        
