@@ -33,7 +33,8 @@ path = sys.argv[1]
 if isSingle(path):
     print (f'Provided a single Claro file, analyzing...\n')
     single = cl.Single(path)
-    single.fit_erf()
+    single.fit_lin()
+    single.fit_erf()    # default arguments: (fit_guess:dict=None)
     single.printData()
     single.plotter()    # default arguments: (scatter = True, show_lin = True, show_erf = True, saveplot = False)
     sys.exit(0)         # the program ends here if given a single file

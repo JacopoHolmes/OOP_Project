@@ -44,7 +44,7 @@ class Single():
         self.y_int = y_int
         
         # linear regression and t-point eval
-        model = stats.linregress(x_int,y_int)
+        model = stats.linregress(x_int , y_int)
 
         half_maximum = (y_int[-1] - y_int[0])/2
         trans_lin = (half_maximum - model.intercept)/model.slope
@@ -61,13 +61,14 @@ class Single():
 
 
     # erf fit method
-    def fit_erf(self):
+    def fit_erf(self , fit_guess:dict=None):
         function = Claro.modified_erf
         x = self.x
         y = self.y
+        if fit_guess is None: fit_guess = self.fit_guess
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message='Covariance of the parameters could not be estimated')
-            params, covar = optimize.curve_fit(function, x , y , self.fit_guess , maxfev=10000)
+            params, covar = optimize.curve_fit(function, x , y , fit_guess , maxfev=10000)
 
             erf_fit_x = np.linspace(self.x.min(), self.x.max(), 100)
             erf_fit_y= function(erf_fit_x , *params)
