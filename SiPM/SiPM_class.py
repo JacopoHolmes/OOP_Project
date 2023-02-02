@@ -28,12 +28,12 @@ class Single():
 
         _ardu = re.search('.+ARDU_(.+?)_.+' , path).group(1)
         _direction = re.search('.+[0-9]_(.+?)_.+' , path).group(1)
-        _number = re.search('.+Test_(.+?)_.+' , path).group(1)
+        _test = re.search('.+Test_(.+?)_.+' , path).group(1)
         _temp = re.search('.+_(.+?)_dataframe.+' , path).group(1)
 
         self._fileinfo = {'direction' : _direction,
                     'ardu' : _ardu,
-                    'number' : _number,
+                    'test' : _test,
                     'temp' : _temp
                    }
         return self._fileinfo
@@ -56,35 +56,57 @@ class Single():
                         sys.exit(1)
 
         df = pd.read_csv(path , header = header_finder(path))
-        df_sorted = df.sort_values(by=['SiPM', 'Step'], ignore_index=True)
-        print(df_sorted)
-        self.sdf = df_sorted
-    
+        self.df_sorted = df.sort_values(by=['SiPM', 'Step'], ignore_index=True)
+        
 
 
+    # Analyzer and plotter method
     def analyzer(self , f_starting_point = 1.55):
         start = f_starting_point
+
+        # Forward analyzer
         if self._fileinfo['direction'] == 'f':
-            df_grouped = self.sdf.groupby("SiPM")
+            df_grouped = self.df_sorted.groupby("SiPM")
             results = df_grouped.apply(fwd_analyzer, start)
-            joined_df = self.sdf.join(results , on = 'SiPM')
-            print(joined_df)
-            #result = [fwd_analyzer(group , f_starting_point) for sipm, group in df_grouped]
-            pdf_fwd = PdfPages(f"Arduino {self._fileinfo['ardu']} Number {self._fileinfo['ardu']} Forward.pdf")
+            joined_df = self.df_sorted.join(results , on = 'SiPM')
+            
+            # saving R_quenching to .csv for each SiPM
+            out_df = joined_df[['SiPM' , 'R_quenching' , 'R_quenching_std']].drop_duplicates(subset="SiPM")
+            res_fname = rf"Arduino {self._fileinfo['ardu']} Test {self._fileinfo['test']} Forward results.csv" 
+            out_df.to_csv(res_fname, index = False)
+            print(f"Results saved as {os.getcwd()}\{res_fname}")
+
+            # Plotting
+            pdf_name = f"Arduino {self._fileinfo['ardu']} Test {self._fileinfo['test']} Forward.pdf"
+            pdf_fwd = PdfPages(pdf_name)
             joined_df.groupby('SiPM').apply(fwd_plotter , pdf_fwd)
+            print(f"Plot saved as {os.getcwd()}\{pdf_name}")
             pdf_fwd.close()
 
 
-        
+        # Reverse analyzer
         else:
-            pdf_rev = PdfPages(f"Arduino {self._fileinfo['ardu']} Number {self._fileinfo['ardu']} Reverse.pdf")
+            pdf_name = f"Arduino {self._fileinfo['ardu']} Test {self._fileinfo['test']} Reverse.pdf"
+            pdf_rev = PdfPages(pdf_name)
+
+            df_grouped = self.df_sorted.groupby("SiPM")
+            df_grouped.apply(rev_plotter , pdf_rev)
+            pdf_name = f"Arduino {self._fileinfo['ardu']} Test {self._fileinfo['test']} Reverse.pdf"
+
+            print(f"Plot saved as {os.getcwd()}\{pdf_name}")
             pdf_rev.close()
             pass
 
 
 
+
+######################################################################
+#           Mathematical functions and other static methods          #
+######################################################################
+
 @staticmethod
 def fwd_analyzer(data , starting_point):
+    """ Linear regression """
 
     x = data['V']
     y = data['I']
@@ -97,7 +119,7 @@ def fwd_analyzer(data , starting_point):
     m = model.slope
     q = model.intercept
     R_quenching = 1000/m
-    R_quenching_std = max(model.stderr, 0.03*R_quenching)
+    R_quenching_std = max(model.stderr, 0.03*R_quenching)   #overestimation of the R standard dev
 
     # saving the values
     values = pd.Series({ 'R_quenching' :  R_quenching, 'R_quenching_std' : R_quenching_std, 'start' : starting_point ,  'm' : m , 'q' : q})
@@ -105,25 +127,59 @@ def fwd_analyzer(data , starting_point):
 
 
 
+@staticmethod
 def fwd_plotter(data, pdf):
-
-    data['y_lin'] = (data['m']*data['V'] + data['q'])
-
-    
+    """ Plot to pdf """
+    data['y_lin'] = (data['m']*data['V'] + data['q'])   # find y values via linear regression
 
     fig , ax = plt.subplots()
-    fig.suptitle("Forward IV curve")
+    sipm_number = list(data['SiPM'].drop_duplicates())[0]
+    fig.suptitle(f"Forward IV curve: SiPM {sipm_number}")
     ax.set_xlabel("Voltage (V)")
     ax.set_ylabel("Current(mA)")
     ax.grid("on")
 
     ax.errorbar(data['V'] , data['I'] ,  data['I_err'] , marker = '.' ,zorder = 1)
-    ax.plot(data[data['V']>= data['start']]['V'] , data[data['V']>= data['start']]['y_lin'] , color = 'green' , linewidth = 1.2 , zorder = 2)
-    ax.annotate(f'Linear fit: Rq = ({data["R_quenching"].iloc[0]:.2f} $\pm$ {data["R_quenching_std"].iloc[0]:.2f}) $\Omega$',
+    ax.plot(data[data['V']>= data['start']]['V'] , data[data['V']>= data['start']]['y_lin'] ,
+            color = 'green' , linewidth = 1.2 , zorder = 2)      # the conditions are there to plot only on the linear part of the curve
+    ax.annotate(f'Linear fit: Rq = ({data["R_quenching"].iloc[0]:.2f} $\pm$ {data["R_quenching_std"].iloc[0]:.2f}) $\Omega$', # iloc to take only one value
                  xy=(0.05, 0.95), xycoords='axes fraction',
                 verticalalignment='top', color='black')
 
     pdf.savefig()
+    plt.close()
+
+
+
+@staticmethod
+def rev_analyzer(data):
+    pass
+
+
+
+@staticmethod
+def rev_plotter(data , pdf):
+
+    fig , ax = plt.subplots()
+    fig.suptitle("Reverse IV curve")
+    ax.set_xlabel("Voltage (V)")
+    ax.set_ylabel("Current(mA)")
+    ax.grid("on")
+
+    ax.set_yscale("log", nonpositive='clip')
+    ax.errorbar(data['V'] , data['I'] ,  data['I_err'] , marker = '.')
+    pdf.savefig()
+    plt.close()
+
+
+
+@staticmethod
+def progress_bar(progress, total):
+    """ Provides a visual progress bar on the terminal"""
+    
+    percent = int(100 * (progress/float(total)))
+    bar ='%' * int(percent) + '-' * (100 - int(percent))
+    print (f"\r|{bar} | {percent:.2f}%" , end="\r")
 
 
 
