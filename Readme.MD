@@ -12,3 +12,11 @@ The project consists of two different assignments, here briefly summarized (the 
 - **\Claro**: contains the code for the claro assignment, with "claro_main.py" being the final program to execute and "claro_class.py" containing all the classes definitions. Also contains the output file folder and a (smaller) folder of input files;
 - **\SiPM**: same structure as \Claro but with the input, output and code for the SiPM assignment;
 - **\Notes**: contains a brief summary of the theory behind the Claro and SiPM projects, the full assignments and the final report.
+
+
+## Usage
+Download the *_main.py and *_class.py and the requirements.txt files of each project and store them in a folder.
+First run the following command to ensure that all the required packages are installed and up to date:
+```pip install -r .\requirements.txt```
+
+The *_main.py file is the "front end" of the program, change the various function arguments here and then run the program via terminal, specifying the file/directory path as the first argument.
