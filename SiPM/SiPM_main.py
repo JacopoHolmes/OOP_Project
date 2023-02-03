@@ -18,10 +18,10 @@ path = sys.argv[1]
 
 if os.path.isdir(path):
     print("Provided a directory path, analyzing...")
-    sipm.dir_reader(path)
+    sipm.DirReader(path)
 
 else:
     print("Provided a file path, analyzing...")
     single = sipm.Single(path)
     single.reader()
-    single.analyzer()  # default arguments : (f_starting_point = 1.6)
+    single.analyzer()  # Default arguments : (f_starting_point = 1.6, peak_width=10)

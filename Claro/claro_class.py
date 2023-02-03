@@ -18,7 +18,7 @@ class Single:
     # Constructor definition
     def __init__(self, path):
         self.path = path
-        data = Claro._get_data(path)
+        data = _get_data(path)
         self.height = data["height"]
         self.t_point = data["t_point"]
         self.width = data["width"]
@@ -60,7 +60,7 @@ class Single:
 
     # erf fit method
     def fit_erf(self, fit_guess: dict = None):
-        function = Claro.modified_erf
+        function = modified_erf
         x = self.x
         y = self.y
         if fit_guess is None:
@@ -104,7 +104,7 @@ class Single:
     # plotter method
     def plotter(self, scatter=True, show_lin=True, show_erf=True, saveplot=False):
         # retrieving the data to be plotted
-        fileinfo = Claro._get_fileinfo(self.path)
+        fileinfo = _get_fileinfo(self.path)
         meta = self._metadata
         x = self.x
         y = self.y
@@ -242,7 +242,7 @@ class Claro:
                     _badfiles.append(chip_name)
                     continue
                 _goodfiles.append(chip_name)
-            Claro.progress_bar(idx + 1, len(list))
+            progress_bar(idx + 1, len(list))
 
         print("\n")
         print(f"found {len(_badfiles)} bad files")
@@ -267,13 +267,13 @@ class Claro:
             chip_name = file.strip("\n")
             with open(chip_name, "r") as chip:
                 # get data
-                data = Claro._get_data(chip_name)
-                info = Claro._get_fileinfo(chip_name)
+                data = _get_data(chip_name)
+                info = _get_fileinfo(chip_name)
                 all_data = info | data["meta"]
 
                 # evaluate erf t. point
                 def fit_erf(self):
-                    function = Claro.modified_erf
+                    function = modified_erf
                     x = data["x"]
                     y = data["y"]
 
@@ -322,7 +322,7 @@ class Claro:
                         for value in all_data.values()
                     ]
                     processed.write("\n")
-                    Claro.progress_bar(idx + 1, len(_goodfiles))
+                    progress_bar(idx + 1, len(_goodfiles))
 
         print("\n")
         print(rf"results stored in {os.getcwd()}\claro_processed_chips.txt")
@@ -364,58 +364,59 @@ class Claro:
     #           Mathematical functions and other static methods          #
     ######################################################################
 
-    @staticmethod
-    def modified_erf(x, height, a, b):
-        """Returns a modified erf function, shifted on the vertical
-        axis by height/2, with parameters a and b.
-        """
-        return (height / 2) * (1 + special.erf((x - a) / (b / 2 * np.sqrt(2))))
 
-    @staticmethod
-    def _get_fileinfo(path):
-        """Retrieves Station chip and channel number from the path"""
+def modified_erf(x, height, a, b):
+    # Returns a modified erf function, shifted on the vertical axis by height/2, with parameters a and b.
+    return (height / 2) * (1 + special.erf((x - a) / (b / 2 * np.sqrt(2))))
 
-        try:
-            _chip = re.search(".+Chip_(.+?).txt", path).group(1)
-            _channel = re.search(".+Ch_(.+?)_.+", path).group(1)
-            _station = re.search(".+\Station_1__(.+?)_Summary.+", path).group(1)
-        except AttributeError:
-            _station = "?"
 
-        _fileinfo = {"station": _station, "chip": _chip, "channel": _channel}
-        return _fileinfo
+@staticmethod
+def _get_fileinfo(path):
+    """Retrieves Station chip and channel number from the path"""
 
-    @staticmethod
-    def _get_data(path):
-        data = pd.read_csv(path, sep="\t", header=None, skiprows=None)
-        height = data[0][0]
-        t_point = data[1][0]
-        width = np.abs(data[2][0])
-        x = data.iloc[2:, 0].to_numpy()
-        y = data.iloc[2:, 1].to_numpy()
-        _metadata = {
-            "path": path,
-            "amplitude": height,
-            "transition point": t_point,
-            "width": width,
-        }
-        fit_guess = [height, t_point, width]
+    try:
+        _chip = re.search(".+Chip_(.+?).txt", path).group(1)
+        _channel = re.search(".+Ch_(.+?)_.+", path).group(1)
+        _station = re.search(".+\Station_1__(.+?)_Summary.+", path).group(1)
+    except AttributeError:
+        _station = "?"
 
-        all_data = {
-            "height": height,
-            "t_point": t_point,
-            "width": width,
-            "x": x,
-            "y": y,
-            "meta": _metadata,
-            "fit_guess": fit_guess,
-        }
-        return all_data
+    _fileinfo = {"station": _station, "chip": _chip, "channel": _channel}
+    return _fileinfo
 
-    @staticmethod
-    def progress_bar(progress, total):
-        """Provides a visual progress bar on the terminal"""
 
-        percent = int(100 * (progress / float(total)))
-        bar = "%" * int(percent) + "-" * (100 - int(percent))
-        print(f"\r|{bar} | {percent:.2f}%", end="\r")
+@staticmethod
+def _get_data(path):
+    data = pd.read_csv(path, sep="\t", header=None, skiprows=None)
+    height = data[0][0]
+    t_point = data[1][0]
+    width = np.abs(data[2][0])
+    x = data.iloc[2:, 0].to_numpy()
+    y = data.iloc[2:, 1].to_numpy()
+    _metadata = {
+        "path": path,
+        "amplitude": height,
+        "transition point": t_point,
+        "width": width,
+    }
+    fit_guess = [height, t_point, width]
+
+    all_data = {
+        "height": height,
+        "t_point": t_point,
+        "width": width,
+        "x": x,
+        "y": y,
+        "meta": _metadata,
+        "fit_guess": fit_guess,
+    }
+    return all_data
+
+
+@staticmethod
+def progress_bar(progress, total):
+    """Provides a visual progress bar on the terminal"""
+
+    percent = int(100 * (progress / float(total)))
+    bar = "%" * int(percent) + "-" * (100 - int(percent))
+    print(f"\r|{bar} | {percent:.2f}%", end="\r")

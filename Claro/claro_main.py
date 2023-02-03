@@ -1,9 +1,3 @@
-import claro_class as cl
-import pandas as pd
-import os
-import fnmatch
-import sys
-
 """
 Author : Jacopo Altieri
 Usage: from the command line, provide a path to a single claro file, a list of files or a directory.
@@ -11,6 +5,13 @@ If given a single Claro, prints the data, the linear interpolation and the erf-e
 If given a directory, creates a list of files matching the path (i.e. Summary\s_curve) and then proceed to analyze them.
 If given a list of files, reads it and analyzes them, creating an output data sheet as well as distribution histograms.
 """
+
+
+import claro_class as cl
+import pandas as pd
+import os
+import fnmatch
+import sys
 
 
 # function to check if the input is a single claro file

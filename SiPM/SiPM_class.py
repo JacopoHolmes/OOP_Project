@@ -4,9 +4,10 @@ import os
 import sys
 import re
 import numpy as np
+from numpy.polynomial import Polynomial
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-from scipy import stats
+from scipy import stats, signal, optimize
 
 
 ###############################################################################
@@ -54,27 +55,28 @@ class Single:
 
         df = pd.read_csv(path, header=header_finder(path))
         self.df_sorted = df.sort_values(by=["SiPM", "Step"], ignore_index=True)
+        self.df_grouped = self.df_sorted.groupby("SiPM")
 
     # Analyzer and plotter method
-    def analyzer(self, f_starting_point=1.55):
+    def analyzer(self, f_starting_point=1.55, peak_width=20):
         start = f_starting_point
+        width = peak_width
 
         # Forward analyzer
         if self._fileinfo["direction"] == "f":
-            df_grouped = self.df_sorted.groupby("SiPM")
-            results = df_grouped.apply(fwd_analyzer, start)
+            results = self.df_grouped.apply(fwd_analyzer, start)
             joined_df = self.df_sorted.join(results, on="SiPM")
 
             # saving R_quenching to .csv for each SiPM
             out_df = joined_df[
                 ["SiPM", "R_quenching", "R_quenching_std"]
             ].drop_duplicates(subset="SiPM")
-            res_fname = rf"Arduino {self._fileinfo['ardu']} Test {self._fileinfo['test']} Forward results.csv"
+            res_fname = rf"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Forward_results.csv"
             out_df.to_csv(res_fname, index=False)
             print(f"Results saved as {os.getcwd()}\{res_fname}")
 
             # Plotting
-            pdf_name = f"Arduino {self._fileinfo['ardu']} Test {self._fileinfo['test']} Forward.pdf"
+            pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Forward.pdf"
             pdf_fwd = PdfPages(pdf_name)
             joined_df.groupby("SiPM").apply(fwd_plotter, pdf_fwd)
             print(f"Plot saved as {os.getcwd()}\{pdf_name}")
@@ -82,11 +84,22 @@ class Single:
 
         # Reverse analyzer
         else:
+            results = self.df_grouped.apply(rev_analyzer, width)
+            joined_df = self.df_sorted.join(results, on="SiPM")
+
+        # saving V_bd to .csv for each SiPM
+            out_df = joined_df[
+                ["SiPM", "V_bd", "V_bd_std"]
+            ].drop_duplicates(subset="SiPM")
+            res_fname = rf"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Reverse_results.csv"
+            out_df.to_csv(res_fname, index=False)
+            print(f"Results saved as {os.getcwd()}\{res_fname}")
+            
+            # Plotting
             pdf_name = f"Arduino {self._fileinfo['ardu']} Test {self._fileinfo['test']} Reverse.pdf"
             pdf_rev = PdfPages(pdf_name)
-
-            df_grouped = self.df_sorted.groupby("SiPM")
-            df_grouped.apply(rev_plotter, pdf_rev)
+            
+            self.df_grouped.apply(rev_plotter, pdf_rev)
             pdf_name = f"Arduino {self._fileinfo['ardu']} Test {self._fileinfo['test']} Reverse.pdf"
 
             print(f"Plot saved as {os.getcwd()}\{pdf_name}")
@@ -103,8 +116,8 @@ class Single:
 def fwd_analyzer(data, starting_point):
     """Linear regression"""
 
-    x = data["V"]
-    y = data["I"]
+    x = data["V"].to_numpy()
+    y = data["I"].to_numpy()
     # isolate the linear data
     x_lin = x[x >= starting_point]
     y_lin = y[x >= starting_point]
@@ -118,7 +131,7 @@ def fwd_analyzer(data, starting_point):
         model.stderr, 0.03 * R_quenching
     )  # overestimation of the R standard dev
 
-    # saving the values
+    # Returning the values
     values = pd.Series(
         {
             "R_quenching": R_quenching,
@@ -149,10 +162,10 @@ def fwd_plotter(data, pdf):
     ax.plot(
         data[data["V"] >= data["start"]]["V"],
         data[data["V"] >= data["start"]]["y_lin"],
-        color="green",
+        color="darkgreen",
         linewidth=1.2,
         zorder=2,
-    )  # the conditions are there to plot only on the linear part of the curve
+    )  # The conditions are there to plot only on the linear part of the curve
     ax.annotate(
         f'Linear fit: Rq = ({data["R_quenching"].iloc[0]:.2f} $\pm$ {data["R_quenching_std"].iloc[0]:.2f}) $\Omega$',  # iloc to take only one value
         xy=(0.05, 0.95),
@@ -166,22 +179,71 @@ def fwd_plotter(data, pdf):
 
 
 @staticmethod
-def rev_analyzer(data):
-    pass
+def rev_analyzer(data, peak_width: int):
+    # Accessing the data
+    x = data["V"].to_numpy()
+    y = data["I"].to_numpy()
+
+    # Evaluation of the 1st derivative
+    dy_dx = np.gradient(y) / np.gradient(x)
+    derivative = 1 / y * dy_dx
+
+    # 5th degree polynomial fit
+    fifth_poly = Polynomial.fit(x, derivative, 5)
+    coefs = fifth_poly.coef
+
+    # Peak finder
+    peaks = signal.find_peaks(fifth_poly(x), width=peak_width)[
+        0
+    ]  # width parameter to discard smaller peaks
+    idx_max = peaks[np.argmax(fifth_poly(x)[peaks])]
+    x_max = x[idx_max]
+
+    # Gaussian fit around the peak
+    x_gauss = x[idx_max - int(peak_width / 2) : idx_max + int(peak_width / 2) + 1]
+    y_gauss = fifth_poly(x)[
+        idx_max - int(peak_width / 2) : idx_max + int(peak_width / 2) + 1
+    ]
+    std_estimate = x_gauss.ptp() / 2
+    fit_guess = [0, 1, x_max, std_estimate]
+    params, covar = optimize.curve_fit(gauss, x_gauss, y_gauss, fit_guess, maxfev=10000)
+    mu = params[2]
+    std = params[3]
+
+    # Returning the values
+    values = pd.Series(
+        {
+            "V_bd": mu,
+            "V_bd_std": std,
+            "width": std_estimate*2,
+            "coefs": coefs,
+        }
+    )
+    return values
 
 
 @staticmethod
 def rev_plotter(data, pdf):
     fig, ax = plt.subplots()
-    fig.suptitle("Reverse IV curve")
+    sipm_number = list(data["SiPM"].drop_duplicates())[0]
+    fig.suptitle(f"Reverse IV curve: SiPM {sipm_number}")
     ax.set_xlabel("Voltage (V)")
     ax.set_ylabel("Current(mA)")
     ax.grid("on")
 
     ax.set_yscale("log", nonpositive="clip")
     ax.errorbar(data["V"], data["I"], data["I_err"], marker=".")
+
+    # ax.set_yscale("linear")
+    # ax.plot(x, derivative , color="darkgreen", marker=".")
     pdf.savefig()
     plt.close()
+    # plt.plot(x, derivative)
+    # plt.plot(x_gauss,y_gauss , color ="black" , marker ="." , zorder = 10)
+    # plt.plot(x_gauss , gauss(x_gauss, *params))
+    #dy_dx = np.gradient(y) / np.gradient(x)
+    #derivative = 1 / y * dy_dx
+    # plt.show()
 
 
 @staticmethod
@@ -193,12 +255,18 @@ def progress_bar(progress, total):
     print(f"\r|{bar} | {percent:.2f}%", end="\r")
 
 
+# Gaussian function
+def gauss(x, H, A, mu, sigma):
+    # Returns a gaussian curve with displacement H, amplitude A, mean mu and std sigma.
+    return H + A * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
+
+
 ###############################################################################
 #                                Directory analyzer                           #
 ###############################################################################
 
 
-class dir_reader:
+class DirReader:
     # Constructor definition
     def __init__(self, dir):
         self.dir = dir
