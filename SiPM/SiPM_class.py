@@ -79,7 +79,7 @@ class Single:
             pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Forward.pdf"
             pdf_fwd = PdfPages(pdf_name)
             joined_df.groupby("SiPM").apply(fwd_plotter, pdf_fwd)
-            print(f"Plot saved as {os.getcwd()}\{pdf_name}")
+            print(f"Plot saved as {os.getcwd()}\{pdf_name}.")
             pdf_fwd.close()
 
         # Reverse analyzer
@@ -87,22 +87,23 @@ class Single:
             results = self.df_grouped.apply(rev_analyzer, width)
             joined_df = self.df_sorted.join(results, on="SiPM")
 
-        # saving V_bd to .csv for each SiPM
-            out_df = joined_df[
-                ["SiPM", "V_bd", "V_bd_std"]
-            ].drop_duplicates(subset="SiPM")
+            # saving V_bd to .csv for each SiPM
+            out_df = joined_df[["SiPM", "V_bd", "V_bd_std"]].drop_duplicates(
+                subset="SiPM"
+            )
             res_fname = rf"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Reverse_results.csv"
             out_df.to_csv(res_fname, index=False)
-            print(f"Results saved as {os.getcwd()}\{res_fname}")
-            
-            # Plotting
-            pdf_name = f"Arduino {self._fileinfo['ardu']} Test {self._fileinfo['test']} Reverse.pdf"
-            pdf_rev = PdfPages(pdf_name)
-            
-            self.df_grouped.apply(rev_plotter, pdf_rev)
-            pdf_name = f"Arduino {self._fileinfo['ardu']} Test {self._fileinfo['test']} Reverse.pdf"
 
-            print(f"Plot saved as {os.getcwd()}\{pdf_name}")
+            print(f"Results saved as {os.getcwd()}\{res_fname}")
+
+            # Plotting
+            pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Reverse.pdf"
+            pdf_rev = PdfPages(pdf_name)
+
+            joined_df.groupby("SiPM").apply(rev_plotter, pdf_rev)
+            pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Reverse.pdf"
+
+            print(f"Plot saved as {os.getcwd()}\{pdf_name}.")
             pdf_rev.close()
             pass
 
@@ -146,10 +147,13 @@ def fwd_analyzer(data, starting_point):
 
 @staticmethod
 def fwd_plotter(data, pdf):
-    """Plot to pdf"""
     data["y_lin"] = (
         data["m"] * data["V"] + data["q"]
-    )  # find y values via linear regression
+    )  # Find y values via linear regression
+    lin_x = data[data["V"] >= data["start"]][
+        "V"
+    ]  # The conditions are there to plot only on the linear part of the curve
+    lin_y = data[data["V"] >= data["start"]]["y_lin"]
 
     fig, ax = plt.subplots()
     sipm_number = list(data["SiPM"].drop_duplicates())[0]
@@ -160,12 +164,12 @@ def fwd_plotter(data, pdf):
 
     ax.errorbar(data["V"], data["I"], data["I_err"], marker=".", zorder=1)
     ax.plot(
-        data[data["V"] >= data["start"]]["V"],
-        data[data["V"] >= data["start"]]["y_lin"],
+        lin_x,
+        lin_y,
         color="darkgreen",
         linewidth=1.2,
         zorder=2,
-    )  # The conditions are there to plot only on the linear part of the curve
+    )
     ax.annotate(
         f'Linear fit: Rq = ({data["R_quenching"].iloc[0]:.2f} $\pm$ {data["R_quenching_std"].iloc[0]:.2f}) $\Omega$',  # iloc to take only one value
         xy=(0.05, 0.95),
@@ -179,7 +183,7 @@ def fwd_plotter(data, pdf):
 
 
 @staticmethod
-def rev_analyzer(data, peak_width: int):
+def rev_analyzer(data, peak_width):
     # Accessing the data
     x = data["V"].to_numpy()
     y = data["I"].to_numpy()
@@ -190,7 +194,7 @@ def rev_analyzer(data, peak_width: int):
 
     # 5th degree polynomial fit
     fifth_poly = Polynomial.fit(x, derivative, 5)
-    coefs = fifth_poly.coef
+    coefs = fifth_poly.convert().coef
 
     # Peak finder
     peaks = signal.find_peaks(fifth_poly(x), width=peak_width)[
@@ -215,7 +219,7 @@ def rev_analyzer(data, peak_width: int):
         {
             "V_bd": mu,
             "V_bd_std": std,
-            "width": std_estimate*2,
+            "width": std_estimate,
             "coefs": coefs,
         }
     )
@@ -224,6 +228,32 @@ def rev_analyzer(data, peak_width: int):
 
 @staticmethod
 def rev_plotter(data, pdf):
+    x = data["V"].to_numpy()
+    y = data["I"].to_numpy()
+    V_bd = data["V_bd"].iloc[0]
+    poly_coefs = data["coefs"].iloc[0]
+
+    derivative = 1 / y * (np.gradient(y) / np.gradient(x))
+    y_poly = (
+        poly_coefs[0]
+        + poly_coefs[1] * x
+        + poly_coefs[2] * x**2
+        + poly_coefs[3] * x**3
+        + poly_coefs[4] * x**4
+        + poly_coefs[5] * x**5
+    )
+    x_gauss = x[
+        np.logical_and(
+            x >= (V_bd - data["width"].iloc[0] / 2),
+            x <= (V_bd + data["width"].iloc[0] / 2),
+        )
+    ]
+    y_gauss = y_poly[
+        np.logical_and(
+            x >= (V_bd - data["width"].iloc[0] / 2),
+            x <= (V_bd + data["width"].iloc[0] / 2),
+        )
+    ]
     fig, ax = plt.subplots()
     sipm_number = list(data["SiPM"].drop_duplicates())[0]
     fig.suptitle(f"Reverse IV curve: SiPM {sipm_number}")
@@ -231,19 +261,22 @@ def rev_plotter(data, pdf):
     ax.set_ylabel("Current(mA)")
     ax.grid("on")
 
-    ax.set_yscale("log", nonpositive="clip")
-    ax.errorbar(data["V"], data["I"], data["I_err"], marker=".")
+    ax.set_yscale("log")
+    ax.errorbar(data["V"], data["I"], data["I_err"], marker=".", label="Data")
+    ax.legend(loc="upper right")
 
-    # ax.set_yscale("linear")
-    # ax.plot(x, derivative , color="darkgreen", marker=".")
+    ax2 = ax.twinx()
+    ax2.tick_params(axis="y", colors="darkgreen")
+
+    ax2.set_ylabel(r"$I^{-1} \frac{dI}{dV}$", color="darkgreen")
+    ax2.scatter(x, derivative, marker="o", s=5, color="darkgreen", label="Derivative")
+    ax2.plot(x, y_poly, color="darkturquoise", label="5th-degree derivative poly fit")
+    ax2.plot(x_gauss, y_gauss, color="darkorange", label="Gaussian around peak")
+    ax2.axvline(V_bd, color="gold", label=f"$V_{{Bd}}$ = {V_bd:.2f} $\pm$ {data['V_bd_std'].iloc[0]:.2f} V" )
+    ax2.legend(loc="upper left")
+
     pdf.savefig()
     plt.close()
-    # plt.plot(x, derivative)
-    # plt.plot(x_gauss,y_gauss , color ="black" , marker ="." , zorder = 10)
-    # plt.plot(x_gauss , gauss(x_gauss, *params))
-    #dy_dx = np.gradient(y) / np.gradient(x)
-    #derivative = 1 / y * dy_dx
-    # plt.show()
 
 
 @staticmethod
@@ -255,7 +288,7 @@ def progress_bar(progress, total):
     print(f"\r|{bar} | {percent:.2f}%", end="\r")
 
 
-# Gaussian function
+# Gaussian curve to fit
 def gauss(x, H, A, mu, sigma):
     # Returns a gaussian curve with displacement H, amplitude A, mean mu and std sigma.
     return H + A * np.exp(-((x - mu) ** 2) / (2 * sigma**2))

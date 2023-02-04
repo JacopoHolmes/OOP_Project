@@ -24,4 +24,4 @@ else:
     print("Provided a file path, analyzing...")
     single = sipm.Single(path)
     single.reader()
-    single.analyzer()  # Default arguments : (f_starting_point = 1.6, peak_width=10)
+    single.analyzer()  # Default arguments : (f_starting_point = 1.6, peak_width=20)
