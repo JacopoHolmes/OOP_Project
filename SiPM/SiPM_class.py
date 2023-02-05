@@ -9,6 +9,10 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from scipy import stats, signal, optimize
 
+import matplotlib
+
+matplotlib.use("Agg")  # Introduced to solve memory issues when dealing with big folders
+
 
 ###############################################################################
 #                                Single file analyzer                         #
@@ -61,13 +65,18 @@ class Single:
     # Analyzer and plotter method
     def analyzer(
         self,
-        f_starting_point=1.55,
+        room_f_start=0.75,
+        ln2_f_start=1.55,
         peak_width=10,
         savepath=os.getcwd(),
         hide_progress=False,
     ):
-        start = f_starting_point
         width = peak_width
+        if self._fileinfo["temp"] == "LN2":
+            start = ln2_f_start
+        else:
+            start = room_f_start
+
         # Create the savepath folder if it doesn't exist
         if not os.path.exists(savepath):
             os.makedirs(savepath)
@@ -81,7 +90,7 @@ class Single:
             out_df = joined_df[
                 ["SiPM", "R_quenching", "R_quenching_std"]
             ].drop_duplicates(subset="SiPM")
-            res_fname = rf"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Forward_results.csv"
+            res_fname = rf"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Temp{self._fileinfo['temp']}_Forward_results.csv"
             out_df.to_csv(os.path.join(savepath, res_fname), index=False)
             if hide_progress is False:
                 print(f"Results saved as {savepath}\{res_fname}")
@@ -89,7 +98,7 @@ class Single:
             # Plotting
             if hide_progress is False:
                 print("Plotting...")
-            pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Forward.pdf"
+            pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Temp{self._fileinfo['temp']}_Forward.pdf"
             pdf_fwd = PdfPages(os.path.join(savepath, pdf_name))
             joined_df.groupby("SiPM").apply(fwd_plotter, pdf_fwd)
             if hide_progress is False:
@@ -105,7 +114,7 @@ class Single:
             out_df = joined_df[["SiPM", "V_bd", "V_bd_std"]].drop_duplicates(
                 subset="SiPM"
             )
-            res_fname = rf"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Reverse_results.csv"
+            res_fname = rf"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Temp{self._fileinfo['temp']}_Reverse_results.csv"
             out_df.to_csv(os.path.join(savepath, res_fname), index=False)
             if hide_progress is False:
                 print(f"Results saved as {savepath}\{res_fname}")
@@ -114,16 +123,53 @@ class Single:
             if hide_progress is False:
                 print("Plotting...")
 
-            pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Reverse.pdf"
+            pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Temp{self._fileinfo['temp']}_Reverse.pdf"
             pdf_rev = PdfPages(os.path.join(savepath, pdf_name))
 
             joined_df.groupby("SiPM").apply(rev_plotter, pdf_rev)
-            pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Reverse.pdf"
 
             if hide_progress is False:
                 print(f"Plot saved as {savepath}\{pdf_name}.")
             pdf_rev.close()
             pass
+
+
+###############################################################################
+#                                Directory analyzer                           #
+###############################################################################
+
+
+class DirReader:
+    # Constructor definition
+    def __init__(self, dir):
+        self.dir = dir
+        self.path = dir
+        self.__file_list = []
+
+    # File finder method
+    def dir_walker(self):
+        top = self.path
+        name_to_match = "*ARDU_*_dataframe.csv"
+        file_list = []
+
+        for root, dirs, files in os.walk(top):
+            for file in files:
+                full_path = os.path.join(root, file)
+                if fnmatch.fnmatch(full_path, name_to_match):
+                    file_list.append(full_path)
+
+        self.__file_list = file_list
+        return self.__file_list
+
+    def dir_analyzer(self):
+        for idx, file in enumerate(self.__file_list):
+            sipm = Single(file)
+            sipm.reader()
+            sipm.analyzer(
+                savepath=os.path.join(os.getcwd(), "results"), hide_progress=True
+            )
+            progress_bar(idx + 1, len(self.__file_list))
+        print("\n")
 
 
 ######################################################################
@@ -133,8 +179,6 @@ class Single:
 
 @staticmethod
 def fwd_analyzer(data, starting_point):
-    """Linear regression"""
-
     x = data["V"].to_numpy()
     y = data["I"].to_numpy()
     # isolate the linear data
@@ -184,7 +228,7 @@ def fwd_plotter(data, pdf):
     ax.plot(
         lin_x,
         lin_y,
-        color="darkgreen",
+        color="darkorange",
         linewidth=1.2,
         zorder=2,
     )
@@ -202,13 +246,11 @@ def fwd_plotter(data, pdf):
 
 @staticmethod
 def rev_analyzer(data, peak_width):
-    # Accessing the data
     x = data["V"].to_numpy()
     y = data["I"].to_numpy()
 
     # Evaluation of the 1st derivative
-    dy_dx = np.gradient(y) / np.gradient(x)
-    derivative = 1 / y * dy_dx
+    derivative = norm_derivative(x, y)
 
     # 5th degree polynomial fit
     fifth_poly = Polynomial.fit(x, derivative, 5)
@@ -216,24 +258,27 @@ def rev_analyzer(data, peak_width):
     y_fit = fifth_poly(x)
 
     # Peak finder
-    x_max = x[np.argmax(y_fit)]
-
+    peaks = signal.find_peaks(fifth_poly(x), width=peak_width)[
+        0
+    ]  # width parameter to discard smaller peaks
+    idx_max = peaks[np.argmax(fifth_poly(x)[peaks])]
+    x_max = x[idx_max]
+    fwhm = x[int(idx_max + peak_width / 2)] - x[int(idx_max - peak_width / 2)]
     # Gaussian fit around the peak
     x_gauss = x[
         np.logical_and(
-            x >= (x_max - peak_width / 2),
-            x <= (x_max + peak_width / 2),
+            x >= (x_max - fwhm / 2),
+            x <= (x_max + fwhm / 2),
         )
     ]
     y_gauss = y_fit[
         np.logical_and(
-            x >= (x_max - peak_width / 2),
-            x <= (x_max + peak_width / 2),
+            x >= (x_max - fwhm / 2),
+            x <= (x_max + fwhm / 2),
         )
     ]
 
-    std_estimate = x_gauss.ptp() / 2
-    fit_guess = [0, 1, x_max, std_estimate]
+    fit_guess = [0, 1, x_max, fwhm]
     params, covar = optimize.curve_fit(gauss, x_gauss, y_gauss, fit_guess, maxfev=10000)
     mu = params[2]
     std = params[3]
@@ -243,8 +288,9 @@ def rev_analyzer(data, peak_width):
         {
             "V_bd": mu,
             "V_bd_std": std,
-            "width": std_estimate,
+            "width": fwhm,
             "coefs": coefs,
+            "params": params,
         }
     )
     return values
@@ -254,10 +300,11 @@ def rev_analyzer(data, peak_width):
 def rev_plotter(data, pdf):
     x = data["V"].to_numpy()
     y = data["I"].to_numpy()
+
     V_bd = data["V_bd"].iloc[0]
     poly_coefs = data["coefs"].iloc[0]
 
-    derivative = 1 / y * (np.gradient(y) / np.gradient(x))
+    derivative = norm_derivative(x, y)
     y_poly = (
         poly_coefs[0]
         + poly_coefs[1] * x
@@ -272,12 +319,8 @@ def rev_plotter(data, pdf):
             x <= (V_bd + data["width"].iloc[0] / 2),
         )
     ]
-    y_gauss = y_poly[
-        np.logical_and(
-            x >= (V_bd - data["width"].iloc[0] / 2),
-            x <= (V_bd + data["width"].iloc[0] / 2),
-        )
-    ]
+    y_gauss = gauss(x_gauss, *data["params"].iloc[0])
+
     fig, ax = plt.subplots()
     sipm_number = list(data["SiPM"].drop_duplicates())[0]
     fig.suptitle(f"Reverse IV curve: SiPM {sipm_number}")
@@ -308,6 +351,12 @@ def rev_plotter(data, pdf):
 
 
 @staticmethod
+def norm_derivative(x, y):
+    dy_dx = np.gradient(y) / np.gradient(x)
+    return 1 / y * dy_dx
+
+
+@staticmethod
 def progress_bar(progress, total):
     """Provides a visual progress bar on the terminal"""
 
@@ -320,39 +369,3 @@ def progress_bar(progress, total):
 def gauss(x, H, A, mu, sigma):
     # Returns a gaussian curve with displacement H, amplitude A, mean mu and std sigma.
     return H + A * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
-
-
-###############################################################################
-#                                Directory analyzer                           #
-###############################################################################
-
-
-class DirReader:
-    # Constructor definition
-    def __init__(self, dir):
-        self.dir = dir
-        self.path = dir
-        self.__file_list = []
-
-    # File finder method
-    def dir_walker(self):
-        top = self.path
-        name_to_match = "*ARDU_*_dataframe.csv"
-        file_list = []
-
-        for root, dirs, files in os.walk(top):
-            for file in files:
-                full_path = os.path.join(root, file)
-                if fnmatch.fnmatch(full_path, name_to_match):
-                    file_list.append(full_path)
-
-        self.__file_list = file_list
-        return self.__file_list
-
-    def dir_analyzer(self):
-        for idx, file in enumerate(self.__file_list):
-            sipm = Single(file)
-            sipm.reader()
-            sipm.analyzer(savepath=os.path.join(os.getcwd(), "results") , hide_progress= True)
-            progress_bar(idx + 1, len(self.__file_list))
-

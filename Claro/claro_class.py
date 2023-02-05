@@ -360,9 +360,10 @@ class Claro:
 
         plt.show()
 
-    ######################################################################
-    #           Mathematical functions and other static methods          #
-    ######################################################################
+
+######################################################################
+#           Mathematical functions and other static methods          #
+######################################################################
 
 
 def modified_erf(x, height, a, b):
@@ -372,7 +373,7 @@ def modified_erf(x, height, a, b):
 
 @staticmethod
 def _get_fileinfo(path):
-    """Retrieves Station chip and channel number from the path"""
+    # Retrieves Station chip and channel number from the path
 
     try:
         _chip = re.search(".+Chip_(.+?).txt", path).group(1)
@@ -415,7 +416,7 @@ def _get_data(path):
 
 @staticmethod
 def progress_bar(progress, total):
-    """Provides a visual progress bar on the terminal"""
+    # Provides a visual progress bar on the terminal
 
     percent = int(100 * (progress / float(total)))
     bar = "%" * int(percent) + "-" * (100 - int(percent))
