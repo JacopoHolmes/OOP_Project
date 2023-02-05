@@ -56,11 +56,21 @@ class Single:
         df = pd.read_csv(path, header=header_finder(path))
         self.df_sorted = df.sort_values(by=["SiPM", "Step"], ignore_index=True)
         self.df_grouped = self.df_sorted.groupby("SiPM")
+        return self.df_grouped
 
     # Analyzer and plotter method
-    def analyzer(self, f_starting_point=1.55, peak_width=20):
+    def analyzer(
+        self,
+        f_starting_point=1.55,
+        peak_width=10,
+        savepath=os.getcwd(),
+        hide_progress=False,
+    ):
         start = f_starting_point
         width = peak_width
+        # Create the savepath folder if it doesn't exist
+        if not os.path.exists(savepath):
+            os.makedirs(savepath)
 
         # Forward analyzer
         if self._fileinfo["direction"] == "f":
@@ -72,14 +82,18 @@ class Single:
                 ["SiPM", "R_quenching", "R_quenching_std"]
             ].drop_duplicates(subset="SiPM")
             res_fname = rf"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Forward_results.csv"
-            out_df.to_csv(res_fname, index=False)
-            print(f"Results saved as {os.getcwd()}\{res_fname}")
+            out_df.to_csv(os.path.join(savepath, res_fname), index=False)
+            if hide_progress is False:
+                print(f"Results saved as {savepath}\{res_fname}")
 
             # Plotting
+            if hide_progress is False:
+                print("Plotting...")
             pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Forward.pdf"
-            pdf_fwd = PdfPages(pdf_name)
+            pdf_fwd = PdfPages(os.path.join(savepath, pdf_name))
             joined_df.groupby("SiPM").apply(fwd_plotter, pdf_fwd)
-            print(f"Plot saved as {os.getcwd()}\{pdf_name}.")
+            if hide_progress is False:
+                print(f"Plot saved as {savepath}\{pdf_name}.")
             pdf_fwd.close()
 
         # Reverse analyzer
@@ -92,18 +106,22 @@ class Single:
                 subset="SiPM"
             )
             res_fname = rf"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Reverse_results.csv"
-            out_df.to_csv(res_fname, index=False)
-
-            print(f"Results saved as {os.getcwd()}\{res_fname}")
+            out_df.to_csv(os.path.join(savepath, res_fname), index=False)
+            if hide_progress is False:
+                print(f"Results saved as {savepath}\{res_fname}")
 
             # Plotting
+            if hide_progress is False:
+                print("Plotting...")
+
             pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Reverse.pdf"
-            pdf_rev = PdfPages(pdf_name)
+            pdf_rev = PdfPages(os.path.join(savepath, pdf_name))
 
             joined_df.groupby("SiPM").apply(rev_plotter, pdf_rev)
             pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Reverse.pdf"
 
-            print(f"Plot saved as {os.getcwd()}\{pdf_name}.")
+            if hide_progress is False:
+                print(f"Plot saved as {savepath}\{pdf_name}.")
             pdf_rev.close()
             pass
 
@@ -195,19 +213,25 @@ def rev_analyzer(data, peak_width):
     # 5th degree polynomial fit
     fifth_poly = Polynomial.fit(x, derivative, 5)
     coefs = fifth_poly.convert().coef
+    y_fit = fifth_poly(x)
 
     # Peak finder
-    peaks = signal.find_peaks(fifth_poly(x), width=peak_width)[
-        0
-    ]  # width parameter to discard smaller peaks
-    idx_max = peaks[np.argmax(fifth_poly(x)[peaks])]
-    x_max = x[idx_max]
+    x_max = x[np.argmax(y_fit)]
 
     # Gaussian fit around the peak
-    x_gauss = x[idx_max - int(peak_width / 2) : idx_max + int(peak_width / 2) + 1]
-    y_gauss = fifth_poly(x)[
-        idx_max - int(peak_width / 2) : idx_max + int(peak_width / 2) + 1
+    x_gauss = x[
+        np.logical_and(
+            x >= (x_max - peak_width / 2),
+            x <= (x_max + peak_width / 2),
+        )
     ]
+    y_gauss = y_fit[
+        np.logical_and(
+            x >= (x_max - peak_width / 2),
+            x <= (x_max + peak_width / 2),
+        )
+    ]
+
     std_estimate = x_gauss.ptp() / 2
     fit_guess = [0, 1, x_max, std_estimate]
     params, covar = optimize.curve_fit(gauss, x_gauss, y_gauss, fit_guess, maxfev=10000)
@@ -272,7 +296,11 @@ def rev_plotter(data, pdf):
     ax2.scatter(x, derivative, marker="o", s=5, color="darkgreen", label="Derivative")
     ax2.plot(x, y_poly, color="darkturquoise", label="5th-degree derivative poly fit")
     ax2.plot(x_gauss, y_gauss, color="darkorange", label="Gaussian around peak")
-    ax2.axvline(V_bd, color="gold", label=f"$V_{{Bd}}$ = {V_bd:.2f} $\pm$ {data['V_bd_std'].iloc[0]:.2f} V" )
+    ax2.axvline(
+        V_bd,
+        color="gold",
+        label=f"$V_{{Bd}}$ = {V_bd:.2f} $\pm$ {abs(data['V_bd_std'].iloc[0]):.2f} V",
+    )
     ax2.legend(loc="upper left")
 
     pdf.savefig()
@@ -303,11 +331,13 @@ class DirReader:
     # Constructor definition
     def __init__(self, dir):
         self.dir = dir
+        self.path = dir
+        self.__file_list = []
 
     # File finder method
     def dir_walker(self):
         top = self.path
-        name_to_match = "ARDU_*_dataframe.csv"
+        name_to_match = "*ARDU_*_dataframe.csv"
         file_list = []
 
         for root, dirs, files in os.walk(top):
@@ -318,3 +348,11 @@ class DirReader:
 
         self.__file_list = file_list
         return self.__file_list
+
+    def dir_analyzer(self):
+        for idx, file in enumerate(self.__file_list):
+            sipm = Single(file)
+            sipm.reader()
+            sipm.analyzer(savepath=os.path.join(os.getcwd(), "results") , hide_progress= True)
+            progress_bar(idx + 1, len(self.__file_list))
+
