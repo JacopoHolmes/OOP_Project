@@ -20,12 +20,12 @@ if os.path.isdir(path):
     print("Provided a directory path, analyzing...")
     directory = sipm.DirReader(path)
     directory.dir_walker()
-    #directory.dir_analyzer() # Default saving directory: (savepath=os.path.join(os.getcwd(), "results", subfolder) ,hide_progress=True)
-    directory.histograms()
+    directory.dir_analyzer() # Default arguments: (root_savepath = os.getcwd() ,hide_progress=True)
+    directory.histograms()  # Default arguments (compare_temp=True , compare_day=True)
     
 
 else:
     print("Provided a file path, analyzing...")
     single = sipm.Single(path)
     single.reader()
-    single.analyzer()  # Default arguments: (f_starting_point = 1.6, peak_width=20 , savepath = os.getcwd(), hide_progress = False)
+    single.analyzer()  # Default arguments: (room_f_start=0.75, ln2_f_start=1.55, peak_width=10, savepath=os.getcwd(), hide_progress=False)

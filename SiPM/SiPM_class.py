@@ -17,7 +17,6 @@ from scipy import stats, signal, optimize
 
 
 class Single:
-    # Constructor definition
     def __init__(self, path):
         self.path = path
         self._fileinfo = {}
@@ -83,7 +82,7 @@ class Single:
             results = self.df_grouped.apply(fwd_analyzer, start)
             joined_df = self.df_sorted.join(results, on="SiPM")
 
-            # saving R_quenching to .csv for each SiPM
+
             out_df = joined_df[
                 ["SiPM", "R_quenching", "R_quenching_std"]
             ].drop_duplicates(subset="SiPM")
@@ -92,7 +91,6 @@ class Single:
             if hide_progress is False:
                 print(f"Results saved as {savepath}\{res_fname}")
 
-            # Plotting
             if hide_progress is False:
                 print("Plotting...")
             pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Temp{self._fileinfo['temp']}_Forward.pdf"
@@ -107,7 +105,7 @@ class Single:
             results = self.df_grouped.apply(rev_analyzer, width)
             joined_df = self.df_sorted.join(results, on="SiPM")
 
-            # saving V_bd to .csv for each SiPM
+
             out_df = joined_df[["SiPM", "V_bd", "V_bd_std"]].drop_duplicates(
                 subset="SiPM"
             )
@@ -116,19 +114,16 @@ class Single:
             if hide_progress is False:
                 print(f"Results saved as {savepath}\{res_fname}")
 
-            # Plotting
+
             if hide_progress is False:
                 print("Plotting...")
-
             pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Temp{self._fileinfo['temp']}_Reverse.pdf"
             pdf_rev = PdfPages(os.path.join(savepath, pdf_name))
-
             joined_df.groupby("SiPM").apply(rev_plotter, pdf_rev)
-
             if hide_progress is False:
                 print(f"Plot saved as {savepath}\{pdf_name}.")
             pdf_rev.close()
-            pass
+
 
 
 ###############################################################################
@@ -137,13 +132,13 @@ class Single:
 
 
 class DirReader:
-    # Constructor definition
+
     def __init__(self, dir):
         self.dir = dir
         self.path = dir
         self.__file_list = []
 
-    # File finder method
+
     def dir_walker(self):
         top = self.path
         name_to_match = "*ARDU_*_dataframe.csv"
@@ -157,9 +152,15 @@ class DirReader:
         self.__file_list = file_list
         return self.__file_list
 
-    def dir_analyzer(self):
+
+    def dir_analyzer(self , root_savepath = os.getcwd()):
         for idx, file in enumerate(self.__file_list):
-            subfolder = re.search(".+\\\\(.+?)\\\\ARDU_.+", file).group(1)
+            
+            try:
+                subfolder = re.search(".+\\\\(.+?)\\\\ARDU_.+", file).group(1)
+            except AttributeError:
+                subfolder = ""
+            print(subfolder)
 
             sipm = Single(file)
             sipm.reader()
@@ -168,52 +169,38 @@ class DirReader:
             )  # Introduced to solve memory issues when dealing with big folders
 
             sipm.analyzer(
-                savepath=os.path.join(os.getcwd(), "results", subfolder),
+                savepath=os.path.join(root_savepath, "results", subfolder), # Creates a "results" subdir in the "root_savepath" directory
                 hide_progress=True,
             )  # hide_progress set to True to have a cleaner look on the terminal
             progress_bar(idx + 1, len(self.__file_list))
         print("\n")
 
-    def histograms(self):
+    def histograms(self, compare_temp=True, compare_day=True):
         top = os.path.join(os.getcwd(), "results")
+        fwd_all = []
+        rev_all = []
 
         for subdir, dirs, files in os.walk(top):
             for dir in dirs:
                 subdir_path = os.path.join(subdir, dir)
 
-                # Load all forward csv files into a list of dataframes and concat them
-                fwd_files = [
-                    file
-                    for file in os.listdir(subdir_path)
-                    if "Forward" in file and file.endswith(".csv")
-                ]
-                fwd_dfs = [
-                    pd.read_csv(os.path.join(subdir_path, file)) for file in fwd_files
-                ]
-                forward_data = pd.concat(fwd_dfs)
+                # Retrieve all the data of fwd and rev
+                forward_data = df_join(subdir_path, "Forward")
+                reverse_data = df_join(subdir_path, "Reverse")
 
-                # Load all reverse csv files into a list of dataframes and concat them
-                rev_files = [
-                    file
-                    for file in os.listdir(subdir_path)
-                    if "Reverse" in file and file.endswith(".csv")
-                ]
-                rev_dfs = [
-                    pd.read_csv(os.path.join(subdir_path, file)) for file in rev_files
-                ]
-                reverse_data = pd.concat(rev_dfs)
+                if (
+                    compare_day == True or compare_temp == True
+                ):  # Create the full df only if needed
+                    fwd_all.append(forward_data)
+                    rev_all.append(reverse_data)
 
                 # Plot R_q and V_bd hist for each subfolder
                 fig, axs = plt.subplots(2)
-                fig.suptitle(f"{dir} R_q and V_Bd distribution")
-                [ax.grid("on") for ax in axs]
-                axs[0].set_title("Quenching Resistance Histogram")
-                axs[0].set_xlabel("$R_q [\Omega$]")
-                axs[0].set_ylabel("Frequency")
+                hist_params(fig, axs, dir)
                 forward_data.plot.hist(
                     column=["R_quenching"],
                     ax=axs[0],
-                    bins=20,
+                    bins=15,
                     range=(
                         min(forward_data["R_quenching"]),
                         max(forward_data["R_quenching"]),
@@ -221,25 +208,58 @@ class DirReader:
                     color="darkgreen",
                     alpha=0.7,
                 )
-
-                axs[1].set_title("Breakdown Voltage Histogram")
-                axs[1].set_xlabel("$V_{bd}$ [V]")
-                axs[1].set_ylabel("Frequency")
                 reverse_data.plot.hist(
                     column=["V_bd"],
                     ax=axs[1],
-                    bins=20,
+                    bins=15,
                     range=(min(reverse_data["V_bd"]), max(reverse_data["V_bd"])),
                     color="darkorange",
                     alpha=0.7,
                 )
-
                 plt.tight_layout()  # Prevents titles and axes from overlapping
-                
-                # Saving the plots
                 plotname = f"Histograms_{dir}.png"
                 plt.savefig(os.path.join(top, plotname), bbox_inches="tight")
+                plt.close()
                 print(f"Plot saved as {top}\{plotname}")
+
+        if compare_temp == True or compare_day == True:
+            # Merge all the fwd and rev dataframes
+            fwd_all = pd.concat(fwd_all)
+            rev_all = pd.concat(rev_all)
+
+        if compare_temp == True:
+            ln2_fwd = fwd_all[fwd_all["subdir"].str.contains("LN2")]
+            ln2_rev = rev_all[fwd_all["subdir"].str.contains("LN2")]
+
+            fig, axs = plt.subplots(2)
+            hist_params(fig, axs, "Liquid Nitrogen comparison")
+            for subdir, group in ln2_fwd.groupby("subdir"):
+                group["R_quenching"].hist(ax=axs[0], label=subdir, bins=15, alpha=0.6)
+            for subdir, group in ln2_rev.groupby("subdir"):
+                group["V_bd"].hist(ax=axs[1], label=subdir, bins=15, alpha=0.6)
+            [ax.legend() for ax in axs]
+            plt.tight_layout()
+            plotname = f"LN2_comparison_hist.png"
+            plt.savefig(os.path.join(top, plotname), bbox_inches="tight")
+            plt.close()
+            print(f"Plot saved as {top}\{plotname}")
+
+        if compare_day == True:
+            fwd_april = fwd_all[fwd_all["subdir"].str.contains("_04_")]
+            rev_april = rev_all[fwd_all["subdir"].str.contains("_04_")]
+
+            fig, axs = plt.subplots(2)
+            hist_params(fig, axs, "April data comparison")
+            for subdir, group in fwd_april.groupby("subdir"):
+                group["R_quenching"].hist(ax=axs[0], label=subdir, bins=15, alpha=0.6)
+            for subdir, group in rev_april.groupby("subdir"):
+                group["V_bd"].hist(ax=axs[1], label=subdir, bins=15, alpha=0.6)
+            [ax.legend() for ax in axs]
+            plt.tight_layout()
+            plotname = f"April_data_comparison_hist.png"
+            plt.savefig(os.path.join(top, plotname), bbox_inches="tight")
+            plt.close()
+            print(f"Plot saved as {top}\{plotname}")
 
 
 ######################################################################
@@ -407,7 +427,7 @@ def rev_plotter(data, pdf):
 
     ax2.set_ylabel(r"$I^{-1} \frac{dI}{dV}$", color="darkgreen")
     ax2.scatter(x, derivative, marker="o", s=5, color="darkgreen", label="Derivative")
-    ax2.plot(x, y_poly, color="darkturquoise", label="5th-degree derivative poly fit")
+    ax2.plot(x, y_poly, color="darkturquoise", label="5th-deg polynomial")
     ax2.plot(x_gauss, y_gauss, color="darkorange", label="Gaussian around peak")
     ax2.axvline(
         V_bd,
@@ -427,6 +447,19 @@ def norm_derivative(x, y):
 
 
 @staticmethod
+def df_join(directory, direction):
+    files = [
+        file
+        for file in os.listdir(directory)
+        if direction in file and file.endswith(".csv")
+    ]
+    dfs = [pd.read_csv(os.path.join(directory, file)) for file in files]
+    data = pd.concat(dfs)
+    data["subdir"] = os.path.basename(directory)
+    return data
+
+
+@staticmethod
 def progress_bar(progress, total):
     """Provides a visual progress bar on the terminal"""
 
@@ -439,3 +472,15 @@ def progress_bar(progress, total):
 def gauss(x, H, A, mu, sigma):
     # Returns a gaussian curve with displacement H, amplitude A, mean mu and std sigma.
     return H + A * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
+
+
+# Title and axis labels for the histograms
+def hist_params(fig, axs, dir):
+    fig.suptitle(f"{dir}: R_q and V_Bd distribution")
+    [ax.grid("on") for ax in axs]
+    axs[0].set_title("Quenching Resistance Histogram")
+    axs[0].set_xlabel("$R_q [\Omega$]")
+    axs[0].set_ylabel("Frequency")
+    axs[1].set_title("Breakdown Voltage Histogram")
+    axs[1].set_xlabel("$V_{Bd}$ [V]")
+    axs[1].set_ylabel("Frequency")

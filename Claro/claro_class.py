@@ -59,8 +59,8 @@ class Single:
         return values
 
     # erf fit method
-    def fit_erf(self, fit_guess: dict = None):
-        function = modified_erf
+    def fit_erf(self, fit_guess = None):
+        modified_erf
         x = self.x
         y = self.y
         if fit_guess is None:
@@ -69,10 +69,10 @@ class Single:
             warnings.filterwarnings(
                 "ignore", message="Covariance of the parameters could not be estimated"
             )
-            params, covar = optimize.curve_fit(function, x, y, fit_guess, maxfev=10000)
+            params, covar = optimize.curve_fit(modified_erf, x, y, fit_guess, maxfev=10000)
 
             erf_fit_x = np.linspace(self.x.min(), self.x.max(), 100)
-            erf_fit_y = function(erf_fit_x, *params)
+            erf_fit_y = modified_erf(erf_fit_x, *params)
             self.erf_x = erf_fit_x
             self.erf_y = erf_fit_y
             std = np.sqrt(np.diag(covar))
@@ -272,11 +272,13 @@ class Claro:
                 all_data = info | data["meta"]
 
                 # evaluate erf t. point
-                def fit_erf(self):
+                def fit_erf(self ,fit_guess = None):
                     function = modified_erf
                     x = data["x"]
                     y = data["y"]
 
+                    if fit_guess is None:
+                        fit_guess = data["fit_guess"]
                     with warnings.catch_warnings():
                         warnings.filterwarnings(
                             "ignore",
@@ -287,7 +289,7 @@ class Claro:
                         )
 
                         params, covar = optimize.curve_fit(
-                            function, x, y, data["fit_guess"], maxfev=1000
+                            function, x, y, fit_guess, maxfev=2000
                         )
                         erf_fit_x = np.linspace(x.min(), x.max(), 100)
                         erf_fit_y = function(erf_fit_x, *params)
