@@ -20,7 +20,8 @@ if os.path.isdir(path):
     print("Provided a directory path, analyzing...")
     directory = sipm.DirReader(path)
     directory.dir_walker()
-    directory.dir_analyzer() # Default saving directory: (savepath = os.path.join(os.getcwd(), 'results'))
+    #directory.dir_analyzer() # Default saving directory: (savepath=os.path.join(os.getcwd(), "results", subfolder) ,hide_progress=True)
+    directory.histograms()
     
 
 else:
