@@ -17,12 +17,51 @@ from scipy import stats, signal, optimize
 
 
 class Single:
+    """
+    A class to analyze single ARDU files
+
+    Parameters:
+    ----------
+    path (str): The file path of the Claro data file.
+
+    Attributes:
+    ----------
+        _fileinfo (dict): A dictionary of metadata about the file, including the direction, arduino number,
+            test number, and temperature.
+        df_sorted (pandas.DataFrame): The data from the .csv file, sorted by SiPM and Step.
+        df_grouped (pandas.DataFrame): The sorted data, grouped by SiPM.
+
+    Methods:
+    ----------
+        get_fileinfo(): Extracts metadata about the file from the file path.
+        reader(): Reads the data from the csv file, sorts it, and groups it by SiPM.
+        analyzer(): Analyze the SiPM data in either forward or reverse direction and save the results.
+
+    """
+
     def __init__(self, path):
+        """
+        Initializes the Single object and sets the path and fileinfo attributes.
+
+        Args:
+        ----------
+            path (str): The path to the csv file to be analyzed.
+
+        """
+
         self.path = path
-        self._fileinfo = {}
+        self.fileinfo = {}
 
+    def get_fileinfo(self):
+        """
+        Extracts metadata about the file from the file path.
 
-    def _get_fileinfo(self):
+        Returns:
+        ----------
+            fileinfo (dict): A dictionary of metadata about the file, including the direction, arduino number,
+            test number, and temperature.
+        """
+
         path = self.path
 
         _ardu = re.search(".+ARDU_(.+?)_.+", path).group(1)
@@ -30,18 +69,24 @@ class Single:
         _test = re.search(".+Test_(.+?)_.+", path).group(1)
         _temp = re.search(".+_(.+?)_dataframe.+", path).group(1)
 
-        self._fileinfo = {
+        self.fileinfo = {
             "direction": _direction,
             "ardu": _ardu,
             "test": _test,
             "temp": _temp,
         }
-        return self._fileinfo
-
+        return self.fileinfo
 
     def reader(self):
+        """
+        Reads the data from the csv file, sorts it, and groups it by SiPM.
+
+        Returns:
+            df_grouped (pandas.DataFrame): The sorted data, grouped by SiPM.
+
+        """
         path = self.path
-        self._get_fileinfo()
+        self.get_fileinfo()
 
         # Skip rows until header (useful if the file contains comments on top)
         def header_finder(path):
@@ -58,17 +103,23 @@ class Single:
         self.df_grouped = self.df_sorted.groupby("SiPM")
         return self.df_grouped
 
-    # Analyzer and plotter method
-    def analyzer(
-        self,
-        room_f_start=0.75,
-        ln2_f_start=1.55,
-        peak_width=10,
-        savepath=os.getcwd(),
-        hide_progress=False,
-    ):
-        width = peak_width
-        if self._fileinfo["temp"] == "LN2":
+    def analyzer(self, room_f_start=0.75, ln2_f_start=1.55, peak_width=10, savepath=os.getcwd(), hide_progress=False):
+        """
+        Analyze the SiPM data in either forward or reverse direction and save the results.
+
+        Parameters:
+        ----------
+            room_f_start (float): The starting voltage for room temperature forward analysis. Default is 0.75.
+            ln2_f_start (float): The starting voltage for LN2 temperature forward analysis. Default is 1.55.
+            peak_width (int): The width of the reverse analysis peak. Default is 10.
+            savepath (str): The path to save the results. Default is the current working directory.
+            hide_progress (bool): If set to True, progress information will not be printed on terminal. Default is False.
+
+        Returns:
+        ----------
+            None
+        """
+        if self.fileinfo["temp"] == "LN2":
             start = ln2_f_start
         else:
             start = room_f_start
@@ -78,22 +129,19 @@ class Single:
             os.makedirs(savepath)
 
         # Forward analyzer
-        if self._fileinfo["direction"] == "f":
+        if self.fileinfo["direction"] == "f":
             results = self.df_grouped.apply(fwd_analyzer, start)
             joined_df = self.df_sorted.join(results, on="SiPM")
 
-
-            out_df = joined_df[
-                ["SiPM", "R_quenching", "R_quenching_std"]
-            ].drop_duplicates(subset="SiPM")
-            res_fname = rf"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Temp{self._fileinfo['temp']}_Forward_results.csv"
+            out_df = joined_df[["SiPM", "R_quenching", "R_quenching_std"]].drop_duplicates(subset="SiPM")
+            res_fname = rf"Arduino{self.fileinfo['ardu']}_Test{self.fileinfo['test']}_Temp{self.fileinfo['temp']}_Forward_results.csv"
             out_df.to_csv(os.path.join(savepath, res_fname), index=False)
             if hide_progress is False:
                 print(f"Results saved as {savepath}\{res_fname}")
 
             if hide_progress is False:
                 print("Plotting...")
-            pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Temp{self._fileinfo['temp']}_Forward.pdf"
+            pdf_name = f"Arduino{self.fileinfo['ardu']}_Test{self.fileinfo['test']}_Temp{self.fileinfo['temp']}_Forward.pdf"
             pdf_fwd = PdfPages(os.path.join(savepath, pdf_name))
             joined_df.groupby("SiPM").apply(fwd_plotter, pdf_fwd)
             if hide_progress is False:
@@ -102,22 +150,18 @@ class Single:
 
         # Reverse analyzer
         else:
-            results = self.df_grouped.apply(rev_analyzer, width)
+            results = self.df_grouped.apply(rev_analyzer, peak_width)
             joined_df = self.df_sorted.join(results, on="SiPM")
 
-
-            out_df = joined_df[["SiPM", "V_bd", "V_bd_std"]].drop_duplicates(
-                subset="SiPM"
-            )
-            res_fname = rf"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Temp{self._fileinfo['temp']}_Reverse_results.csv"
+            out_df = joined_df[["SiPM", "V_bd", "V_bd_std"]].drop_duplicates(subset="SiPM")
+            res_fname = rf"Arduino{self.fileinfo['ardu']}_Test{self.fileinfo['test']}_Temp{self.fileinfo['temp']}_Reverse_results.csv"
             out_df.to_csv(os.path.join(savepath, res_fname), index=False)
             if hide_progress is False:
                 print(f"Results saved as {savepath}\{res_fname}")
 
-
             if hide_progress is False:
                 print("Plotting...")
-            pdf_name = f"Arduino{self._fileinfo['ardu']}_Test{self._fileinfo['test']}_Temp{self._fileinfo['temp']}_Reverse.pdf"
+            pdf_name = f"Arduino{self.fileinfo['ardu']}_Test{self.fileinfo['test']}_Temp{self.fileinfo['temp']}_Reverse.pdf"
             pdf_rev = PdfPages(os.path.join(savepath, pdf_name))
             joined_df.groupby("SiPM").apply(rev_plotter, pdf_rev)
             if hide_progress is False:
@@ -132,50 +176,102 @@ class Single:
 
 
 class DirReader:
+    """
+    Class for reading and analyzing the SiPM data in a directory.
+
+    The `DirReader` class takes in a directory path and can analyze all the files
+    in that directory and its subdirectories that match the pattern "*ARDU_*_dataframe.csv".
+    The analysis includes generating histograms of all the R_q and V_bd, with the option to compare temperature and day differences.
+
+    Parameters:
+    ----------
+        dir (str): The directory path to analyze.
+
+    Attributes:
+    ----------
+        __file_list (list):  A list containing all the full paths of the files.
+
+    Methods:
+    ----------
+        dir_walker(): Walk the directory to find all the files that match the correct pattern.
+        dir_analyzer(root_savepath = os.getcwd()): Analyze each file in the file list and save the results.
+        histograms(compare_temp=True, compare_day=True): Plot histograms of R_q and V_bd.
+    """
 
     def __init__(self, dir):
-        self.dir = dir
-        self.path = dir
-        self.__file_list = []
+        """
+        Initialize the DirReader object with the directory path.
 
+        Args:
+        ----------
+            dir (str): the directory path
+        """
+
+        self.path = dir
 
     def dir_walker(self):
+        """
+        Walk the directory to find all the files that match the pattern "*ARDU_*_dataframe.csv".
+
+        Returns:
+        -------
+            file_list (list of str): list of all the matching file paths
+        """
+
         top = self.path
         name_to_match = "*ARDU_*_dataframe.csv"
-        file_list = []
+        self._file_list = []
 
         for root, dirs, files in os.walk(top):
             for file in files:
                 full_path = os.path.join(root, file)
                 if fnmatch.fnmatch(full_path, name_to_match):
-                    file_list.append(full_path)
-        self.__file_list = file_list
-        return self.__file_list
+                    self._file_list.append(full_path)
+        return self._file_list
 
+    def dir_analyzer(self, root_savepath=os.getcwd()):
+        """
+        Analyze each file in the file list and save the results to the root_savepath/results folder.
 
-    def dir_analyzer(self , root_savepath = os.getcwd()):
-        for idx, file in enumerate(self.__file_list):
-            
+        Args:
+        ----------
+            root_savepath (str, optional): the root directory for saving the analysis results, defaults to current working directory.
+
+        Returns:
+        ----------
+            None
+        """
+
+        for idx, file in enumerate(self._file_list):
             try:
                 subfolder = re.search(".+\\\\(.+?)\\\\ARDU_.+", file).group(1)
             except AttributeError:
                 subfolder = ""
-            print(subfolder)
 
             sipm = Single(file)
             sipm.reader()
-            matplotlib.use(
-                "Agg"
-            )  # Introduced to solve memory issues when dealing with big folders
+            matplotlib.use("Agg")  # Introduced to solve memory issues when dealing with big folders
 
             sipm.analyzer(
-                savepath=os.path.join(root_savepath, "results", subfolder), # Creates a "results" subdir in the "root_savepath" directory
-                hide_progress=True,
-            )  # hide_progress set to True to have a cleaner look on the terminal
-            progress_bar(idx + 1, len(self.__file_list))
+                savepath=os.path.join(root_savepath, "results", subfolder),  # Creates a "results" subdir in the "root_savepath" directory
+                hide_progress=True,)  # hide_progress set to True to have a cleaner look on the terminal
+            progress_bar(idx + 1, len(self._file_list))
         print("\n")
 
     def histograms(self, compare_temp=True, compare_day=True):
+        """
+        Plot histograms of R_q and V_bd.
+
+        Args:
+        ----------
+            compare_temp (bool, optional): If True, produce an histogram that compares the LN2 measures. Defaults to True
+            compare_day (bool, optional): If True, produce an histogram that compares the analysis of the 22/23 of April. Defaults to True
+
+        Returns:
+        ----------
+            None
+        """
+
         top = os.path.join(os.getcwd(), "results")
         fwd_all = []
         rev_all = []
@@ -188,9 +284,7 @@ class DirReader:
                 forward_data = df_join(subdir_path, "Forward")
                 reverse_data = df_join(subdir_path, "Reverse")
 
-                if (
-                    compare_day == True or compare_temp == True
-                ):  # Create the full df only if needed
+                if (compare_day == True or compare_temp == True):  # Create the full df only if needed
                     fwd_all.append(forward_data)
                     rev_all.append(reverse_data)
 
@@ -201,10 +295,7 @@ class DirReader:
                     column=["R_quenching"],
                     ax=axs[0],
                     bins=15,
-                    range=(
-                        min(forward_data["R_quenching"]),
-                        max(forward_data["R_quenching"]),
-                    ),
+                    range=(min(forward_data["R_quenching"]), max(forward_data["R_quenching"])),
                     color="darkgreen",
                     alpha=0.7,
                 )
@@ -262,6 +353,7 @@ class DirReader:
             print(f"Plot saved as {top}\{plotname}")
 
 
+
 ######################################################################
 #           Mathematical functions and other static methods          #
 ######################################################################
@@ -269,6 +361,23 @@ class DirReader:
 
 @staticmethod
 def fwd_analyzer(data, starting_point):
+    """
+    Analyze the forward IV Curve by fitting a line on the linear part of the data.
+
+    Args:
+    ----------
+        data (pandas.DataFrame): pd DataFrame containing the values of V, I and I_err.
+        starting_point (float): specifies the starting point from where to isolate the linear data.
+
+    Returns:
+    ----------
+        values (pandas.Series): A pandas Series containing the following values:
+            R_quenching (float): the quenching resistance of the system calculated using linear regression.
+            R_quenching_std (float), an overestimation of the standard deviation of R_quenching.
+            start (float), the starting point used to isolate the linear data.
+            m (float), the slope of the regression line.
+            q (float), the intercept of the regression line.
+    """
     x = data["V"].to_numpy()
     y = data["I"].to_numpy()
     # isolate the linear data
@@ -280,11 +389,8 @@ def fwd_analyzer(data, starting_point):
     m = model.slope
     q = model.intercept
     R_quenching = 1000 / m
-    R_quenching_std = max(
-        model.stderr, 0.03 * R_quenching
-    )  # overestimation of the R standard dev
+    R_quenching_std = max(model.stderr, 0.03 * R_quenching)  # overestimation of the R standard dev
 
-    # Returning the values
     values = pd.Series(
         {
             "R_quenching": R_quenching,
@@ -299,12 +405,21 @@ def fwd_analyzer(data, starting_point):
 
 @staticmethod
 def fwd_plotter(data, pdf):
-    data["y_lin"] = (
-        data["m"] * data["V"] + data["q"]
-    )  # Find y values via linear regression
-    lin_x = data[data["V"] >= data["start"]][
-        "V"
-    ]  # The conditions are there to plot only on the linear part of the curve
+    """
+    Plots the data and results of the forward IV curve.
+
+    Args:
+    ----------
+        data (pandas.DataFrame): pd DataFrame containing the metadata, data and regression results for each SiPM analysis.
+        pdf ( matplotlib.backends.backend_pdf.PdfPages): A PdfPages object used to save the pdf.
+
+    Returns:
+    ----------
+    None
+    """
+
+    data["y_lin"] = (data["m"] * data["V"] + data["q"])  # Find y values via linear regression
+    lin_x = data[data["V"] >= data["start"]]["V"]  # The conditions are there to plot only on the linear part of the curve
     lin_y = data[data["V"] >= data["start"]]["y_lin"]
 
     fig, ax = plt.subplots()
@@ -336,6 +451,24 @@ def fwd_plotter(data, pdf):
 
 @staticmethod
 def rev_analyzer(data, peak_width):
+    """
+    Analyze the reverse IV Curve by fitting a 5th-degree polynomial on the data derivative and a gaussian curve on the poly peak.
+
+    Args:
+    ----------
+        data (pandas.DataFrame): pd DataFrame containing the values of V, I and I_err.
+        peak_width (int): The width of the peak to search.
+
+    Returns:
+    ----------
+        values (pandas.Series): A pandas Series containing the following values:
+            V_bd (float): The breakdown voltage, evaluated as the mean of the gaussian curve.
+            V_bd_std (float): The breakdown voltage standard deviation, evaluated as the standard deviation of the gaussian curve.
+            width (float): the FWHM of the gaussian curve.
+            coefs (list) : list of the 5th-degree polynomial coefficients.
+            params (list): the parameters of the curve fit of the gaussian.
+    """
+
     x = data["V"].to_numpy()
     y = data["I"].to_numpy()
 
@@ -348,36 +481,22 @@ def rev_analyzer(data, peak_width):
     y_fit = fifth_poly(x)
 
     # Peak finder
-    peaks = signal.find_peaks(fifth_poly(x), width=peak_width)[
-        0
-    ]  # width parameter to discard smaller peaks
+    peaks = signal.find_peaks(fifth_poly(x), width=peak_width)[0]  # width parameter to discard smaller peaks
     idx_max = peaks[np.argmax(fifth_poly(x)[peaks])]
     x_max = x[idx_max]
     fwhm = x[int(idx_max + peak_width / 2)] - x[int(idx_max - peak_width / 2)]
     # Gaussian fit around the peak
-    x_gauss = x[
-        np.logical_and(
-            x >= (x_max - fwhm / 2),
-            x <= (x_max + fwhm / 2),
-        )
-    ]
-    y_gauss = y_fit[
-        np.logical_and(
-            x >= (x_max - fwhm / 2),
-            x <= (x_max + fwhm / 2),
-        )
-    ]
+    x_gauss = x[np.logical_and(x >= (x_max - fwhm / 2), x <= (x_max + fwhm / 2))]
+    y_gauss = y_fit[np.logical_and(x >= (x_max - fwhm / 2), x <= (x_max + fwhm / 2))]
 
     fit_guess = [0, 1, x_max, fwhm]
     params, covar = optimize.curve_fit(gauss, x_gauss, y_gauss, fit_guess, maxfev=10000)
-    mu = params[2]
-    std = params[3]
 
     # Returning the values
     values = pd.Series(
         {
-            "V_bd": mu,
-            "V_bd_std": std,
+            "V_bd": params[2],
+            "V_bd_std": params[3],
             "width": fwhm,
             "coefs": coefs,
             "params": params,
@@ -388,6 +507,18 @@ def rev_analyzer(data, peak_width):
 
 @staticmethod
 def rev_plotter(data, pdf):
+    """Plots the data and results of the forward IV curve.
+
+    Args:
+    ----------
+        data (pandas.DataFrame): pd DataFrame containing the metadata, data and fit results for each SiPM analysis.
+        pdf ( matplotlib.backends.backend_pdf.PdfPages): A PdfPages object used to save the pdf.
+
+    Returns:
+    ----------
+    None
+    """
+
     x = data["V"].to_numpy()
     y = data["I"].to_numpy()
 
@@ -403,12 +534,7 @@ def rev_plotter(data, pdf):
         + poly_coefs[4] * x**4
         + poly_coefs[5] * x**5
     )
-    x_gauss = x[
-        np.logical_and(
-            x >= (V_bd - data["width"].iloc[0] / 2),
-            x <= (V_bd + data["width"].iloc[0] / 2),
-        )
-    ]
+    x_gauss = x[np.logical_and(x >= (V_bd - data["width"].iloc[0] / 2), x <= (V_bd + data["width"].iloc[0] / 2))]
     y_gauss = gauss(x_gauss, *data["params"].iloc[0])
 
     fig, ax = plt.subplots()
@@ -429,11 +555,7 @@ def rev_plotter(data, pdf):
     ax2.scatter(x, derivative, marker="o", s=5, color="darkgreen", label="Derivative")
     ax2.plot(x, y_poly, color="darkturquoise", label="5th-deg polynomial")
     ax2.plot(x_gauss, y_gauss, color="darkorange", label="Gaussian around peak")
-    ax2.axvline(
-        V_bd,
-        color="gold",
-        label=f"$V_{{Bd}}$ = {V_bd:.2f} $\pm$ {abs(data['V_bd_std'].iloc[0]):.2f} V",
-    )
+    ax2.axvline(V_bd, color="gold", label=f"$V_{{Bd}}$ = {V_bd:.2f} $\pm$ {abs(data['V_bd_std'].iloc[0]):.2f} V")
     ax2.legend(loc="upper left")
 
     pdf.savefig()
@@ -441,18 +563,21 @@ def rev_plotter(data, pdf):
 
 
 @staticmethod
-def norm_derivative(x, y):
-    dy_dx = np.gradient(y) / np.gradient(x)
-    return 1 / y * dy_dx
-
-
-@staticmethod
 def df_join(directory, direction):
-    files = [
-        file
-        for file in os.listdir(directory)
-        if direction in file and file.endswith(".csv")
-    ]
+    """
+    A static method to join multiple CSV files into one Pandas DataFrame.
+    
+    Args:
+    ----------
+    directory (str): the directory of the data to retrieve.
+    direction (str): string to match
+    
+    Returns:
+    ----------
+    data (pandas.Dataframe): A Pandas DataFrame containing the contents of the joined csv files and an additional column with the name of the directory.
+    """
+    
+    files = [file for file in os.listdir(directory) if direction in file and file.endswith(".csv")]
     dfs = [pd.read_csv(os.path.join(directory, file)) for file in files]
     data = pd.concat(dfs)
     data["subdir"] = os.path.basename(directory)
@@ -461,7 +586,18 @@ def df_join(directory, direction):
 
 @staticmethod
 def progress_bar(progress, total):
-    """Provides a visual progress bar on the terminal"""
+    """
+    Display a progress bar in the terminal.
+
+    Args:
+    ----------
+        progress (int): Current progress of the task.
+        total (int): Total number of steps in the task.
+
+    Returns:
+    ----------
+        None
+    """
 
     percent = int(100 * (progress / float(total)))
     bar = "%" * int(percent) + "-" * (100 - int(percent))
@@ -470,12 +606,51 @@ def progress_bar(progress, total):
 
 # Gaussian curve to fit
 def gauss(x, H, A, mu, sigma):
-    # Returns a gaussian curve with displacement H, amplitude A, mean mu and std sigma.
+    """
+    Returns a gaussian curve with displacement H, amplitude A, mean mu and standard deviation sigma.
+
+    Parameters:
+    ----------
+        x (numpy.ndarray): Input values for the curve.
+        H (float): The displacement of the curve.
+        A (float): The amplitude of the curve.
+        mu (float): The mean of the curve.
+        sigma (float): The standard deviation of the curve.
+
+    Returns:
+    ----------
+        numpy.ndarray: The values of the gaussian curve for the input x.
+    """
     return H + A * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
+
+
+# Normalized derivative
+def norm_derivative(x, y):
+    """
+    Evaluate the normalized derivative of the x and y data as 1/y * dy/dx.
+
+    Args:
+        x (np.array): data on the x axis
+        y (np.array): data on the y axis
+
+    Returns:
+        float : the normalized derivative
+    """
+    dy_dx = np.gradient(y) / np.gradient(x)
+    return 1 / y * dy_dx
 
 
 # Title and axis labels for the histograms
 def hist_params(fig, axs, dir):
+    """
+    This function takes as input a figure and two axes (as a list) and sets the titles, labels and grids for the histograms.
+    The first histogram is for the quenching resistance and the second one is for the breakdown voltage.
+
+    Args:
+        fig (matplotlib.figure): Figure to set the title of
+        axs (list): lsit of the axes of the plot
+        dir (str): direction of the IV curve
+    """
     fig.suptitle(f"{dir}: R_q and V_Bd distribution")
     [ax.grid("on") for ax in axs]
     axs[0].set_title("Quenching Resistance Histogram")

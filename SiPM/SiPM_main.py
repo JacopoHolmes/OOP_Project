@@ -10,9 +10,8 @@ This program analyzes SiPM data from either a single .csv file or a directory co
 For a single SiPM file, it reads the Arduino info, data and the direction, and then produces the following analysis for each SiPM in the arduino (30 total):
 - If the direction is forward, it produces a linear regression on the linear part of the curve, an plots it.
   The slope of this line is the Quenching Resistance (rescaled by some constant factors).
-- If the direction is reverse, it evaluates the derivative of the data, fits a 5-th degree polynomial on it and then a gaussian curve
-  on top of the polynomial peak. The mean of this gaussian is the Breakdown Voltage of the SiPM. It also produces a plot with all these data.
-
+- If the direction is reverse, it evaluates the derivative of the data, fits a 5th-degree polynomial on it and then a gaussian curve on top of the polynomial peak.
+  The mean of this gaussian is the Breakdown Voltage of the SiPM. It also produces a plot with all these data.
 If a directory path is provided, the program will traverse the directory and analyze all .csv files within it. The analyzed data is then saved to the "savepath" directory.
 On top of the single analysis, histograms of all the R_q and V_bd are also generated, with the option to compare temperature and day differences.
 
@@ -23,7 +22,7 @@ Usage:
 Inputs:
 ----------
     input_file/input_directory: str
-        Path to a single ARDU file or a directory containing Ardu files.
+        Path to a single ARDU file or a directory containing ARDU files.
 
 Outputs:
 ----------
