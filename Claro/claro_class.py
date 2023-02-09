@@ -338,7 +338,7 @@ class MultiAnalyzer:
 
         for root, dirs, files in os.walk(top):
             for file in files:
-                full_path = os.path.join(root, file)
+                full_path = os.path.abspath(os.path.join(root, file))
                 if fnmatch.fnmatch(full_path, name_to_match):
                     self.__file_list.append(full_path)
 
@@ -361,7 +361,7 @@ class MultiAnalyzer:
             self.__file_list = all_files.readlines()
         return self.__file_list
 
-    def analyzer(self, discard_unfit=True, savepath=os.getcwd()):
+    def analyzer(self, discard_unfit=True, savepath=os.path.abspath(os.getcwd())):
         """
         Reads self.__file_list and splits the good and bad files.
         Applies the Claro.fit_erf() method to the good files and outputs a .csv file with the results. If the fit does not converge, set the erf standard dev to NaN.
@@ -369,7 +369,7 @@ class MultiAnalyzer:
         Args:
         ----------
             discard_unfit (bool, optional): If True, puts all the non converging file paths into a "claro_unfit_chips.txt". Defaults to True.
-            savepath (string, optional): The save path of the results. Defaults to the current directory
+            savepath (string, optional): The save path of the results. Defaults to the current directory.
 
         Returns:
         ----------
@@ -409,7 +409,6 @@ class MultiAnalyzer:
 
         # read data and evaluate erf t.point from good files
         print("processing the good files...")
-
         processed_list = []
         for idx, file in enumerate(_goodfiles):
             claro = Claro(file)
@@ -433,7 +432,6 @@ class MultiAnalyzer:
                 erf["transition_point_(erf)"][0],
                 erf["transition_point_(erf)"][1],
             ]
-
             processed_list.append(row)
 
             progress_bar(idx + 1, len(_goodfiles))
@@ -463,7 +461,7 @@ class MultiAnalyzer:
     def histograms(self, saveplot=True):
         """
         Plot histograms of the transition points, their corresponding erf estimates and the discrepancy between them.
-        
+
         Parameters:
         ----------
         - saveplot (bool, optional): Indicates whether to save the plot as a png file. Defaults to True
@@ -476,6 +474,7 @@ class MultiAnalyzer:
         erf_list = np.array(self.processed_df.erf_t_point)
         discrepancy = t - erf_list
 
+
         # plot options
         fig, axs = plt.subplots(3)
         fig.suptitle("Histogram of the transition points distribution")
@@ -483,12 +482,12 @@ class MultiAnalyzer:
 
         axs[0].hist(t, bins=200, color="darkturquoise")
         axs[1].hist(erf_list, bins=200, color="darkorange")
-        axs[2].hist(discrepancy, bins=20, range=(-1e-6, 1e-6), color="darkblue")  
+        axs[2].hist(discrepancy, bins=20, range=(-1e-6, 1e-6), color="darkblue")
 
         axs[0].set_title("Read T. point")
         axs[1].set_title("Erf T. point")
         axs[2].set_title("Discrepancy")
-        
+
         plt.tight_layout()  # Prevents titles and axes from overlapping
 
         if saveplot == True:
