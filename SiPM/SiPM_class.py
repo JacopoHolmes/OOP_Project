@@ -21,7 +21,7 @@ class Single:
         self.path = path
         self._fileinfo = {}
 
-    # fileinfo retriever method
+
     def _get_fileinfo(self):
         path = self.path
 
@@ -38,7 +38,7 @@ class Single:
         }
         return self._fileinfo
 
-    # Data reader method
+
     def reader(self):
         path = self.path
         self._get_fileinfo()
