@@ -452,7 +452,7 @@ class MultiAnalyzer:
             ],
         )
         self.processed_df.to_csv(
-            rf"{savepath}\claro_processed_chips.txt",
+            rf"{savepath}\claro_processed_chips.csv",
             index=False,
         )
 
