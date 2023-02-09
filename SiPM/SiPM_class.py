@@ -435,16 +435,11 @@ def fwd_plotter(data, pdf):
         lin_y,
         color="darkorange",
         linewidth=1.2,
+        label=f'Linear fit: Rq = ({data["R_quenching"].iloc[0]:.2f} $\pm$ {data["R_quenching_std"].iloc[0]:.2f}) $\Omega$',
         zorder=2,
     )
-    ax.annotate(
-        f'Linear fit: Rq = ({data["R_quenching"].iloc[0]:.2f} $\pm$ {data["R_quenching_std"].iloc[0]:.2f}) $\Omega$',  # iloc to take only one value
-        xy=(0.05, 0.95),
-        xycoords="axes fraction",
-        verticalalignment="top",
-        color="black",
-    )
 
+    ax.legend(loc="upper left")
     pdf.savefig()
     plt.close()
 
@@ -485,12 +480,13 @@ def rev_analyzer(data, peak_width):
     idx_max = peaks[np.argmax(fifth_poly(x)[peaks])]
     x_max = x[idx_max]
     fwhm = x[int(idx_max + peak_width / 2)] - x[int(idx_max - peak_width / 2)]
+    
     # Gaussian fit around the peak
     x_gauss = x[np.logical_and(x >= (x_max - fwhm / 2), x <= (x_max + fwhm / 2))]
     y_gauss = y_fit[np.logical_and(x >= (x_max - fwhm / 2), x <= (x_max + fwhm / 2))]
 
-    fit_guess = [0, 1, x_max, fwhm]
-    params, covar = optimize.curve_fit(gauss, x_gauss, y_gauss, fit_guess, maxfev=10000)
+    fit_guess = [0, 1, x_max, fwhm/2]
+    params, covar = optimize.curve_fit(gauss, x_gauss, y_gauss, fit_guess, maxfev=20000)
 
     # Returning the values
     values = pd.Series(
