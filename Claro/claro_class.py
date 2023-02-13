@@ -57,7 +57,9 @@ class Claro:
         self.y = data["y"]
         self.fit_guess = data["fit_guess"]
         self._fileinfo = self.get_fileinfo()
-
+        self.values = {}
+        self.erf_params = {}
+        
     def get_fileinfo(self):
         """
         Extracts and returns file information from the file path.
