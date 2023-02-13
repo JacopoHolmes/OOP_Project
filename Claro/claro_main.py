@@ -81,5 +81,5 @@ else:
     multi = cl.MultiAnalyzer(path)
     multi.list_reader()
 
-multi.analyzer()  # default arguments: (discard_unfit=True, savepath=os.getcwd())
+multi.analyzer()  # default arguments: (discard_unfit=True, savepath=os.getcwd() ,erf_guess=None)
 multi.histograms()  # default arguments: (saveplot=True)
