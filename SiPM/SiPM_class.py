@@ -51,6 +51,7 @@ class Single:
 
         self.path = path
         self.fileinfo = {}
+        self.df_grouped = {}
 
     def get_fileinfo(self):
         """
@@ -215,7 +216,7 @@ class DirReader:
 
         Returns:
         -------
-            file_list (list of str): list of all the matching file paths
+            _file_list (list): list of all the matching file paths (as strings)
         """
 
         top = self.path
@@ -254,7 +255,7 @@ class DirReader:
 
             sipm.analyzer(
                 savepath=os.path.join(root_savepath, "results", subfolder),  # Creates a "results" subdir in the "root_savepath" directory
-                hide_progress=True,)  # hide_progress set to True to have a cleaner look on the terminal
+                hide_progress=True)  # hide_progress set to True to have a cleaner look on the terminal
             progress_bar(idx + 1, len(self._file_list))
         print("\n")
 
