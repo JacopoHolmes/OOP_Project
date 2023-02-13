@@ -208,7 +208,7 @@ class Claro:
         print(f"Width: {self.all_data['width']}")
         for key, value in self.fit_lin().items():
             print(key, ": ", value)
-        for key, value in self.fit_erf().items():
+        for key, value in self.fit_erf(fit_guess).items():
             print(key, ": ", value)
         if self.fit_erf(fit_guess)["transition_point_(erf)"][1] == np.nan:
             print("the fit did not converge, std set to nan.")
@@ -366,7 +366,7 @@ class MultiAnalyzer:
             self.__file_list = all_files.readlines()
         return self.__file_list
 
-    def analyzer(self, discard_unfit=True, savepath=os.path.abspath(os.getcwd())):
+    def analyzer(self, discard_unfit=True, savepath=os.path.abspath(os.getcwd()) , erf_guess = None):
         """
         Reads self.__file_list and splits the good and bad files.
         Applies the Claro.fit_erf() method to the good files and outputs a .csv file with the results. If the fit does not converge, set the erf standard dev to NaN.
@@ -375,6 +375,8 @@ class MultiAnalyzer:
         ----------
             discard_unfit (bool, optional): If True, puts all the non converging file paths into a "claro_unfit_chips.txt". Defaults to True.
             savepath (string, optional): The save path of the results. Defaults to the current directory.
+            erf_guess (list, optional): a list containing the first guesses for the height, t_point and width of the data. Defaults to None.
+
 
         Returns:
         ----------
@@ -419,7 +421,7 @@ class MultiAnalyzer:
             claro = Claro(file)
             info = claro.get_fileinfo()
             data = claro.get_data()
-            erf = claro.fit_erf()
+            erf = claro.fit_erf(erf_guess)
 
             if discard_unfit == True:
                 if np.isnan(erf["transition_point_(erf)"][1]):
