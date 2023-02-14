@@ -192,7 +192,7 @@ class Claro:
         }
         return self.erf_params
 
-    def print_data(self, fit_guess = None):
+    def print_data(self):
         """
         Prints the height, transition point, and width of the data, as well as the fit results from `self.fit_lin()` and `self.fit_erf()`.
         Also prints a message if the fit for `self.fit_erf()` did not converge.
@@ -210,9 +210,9 @@ class Claro:
         print(f"Width: {self.all_data['width']}")
         for key, value in self.fit_lin().items():
             print(key, ": ", value)
-        for key, value in self.fit_erf(fit_guess).items():
+        for key, value in self.erf_params.items():
             print(key, ": ", value)
-        if self.fit_erf(fit_guess)["transition_point_(erf)"][1] == np.nan:
+        if self.erf_params["transition_point_(erf)"][1] == np.nan:
             print("the fit did not converge, std set to nan.")
         print("\n")
 
