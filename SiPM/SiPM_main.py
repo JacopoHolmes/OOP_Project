@@ -1,6 +1,7 @@
 import SiPM_class as sipm
 import sys
 import os
+import fnmatch
 
 
 """
@@ -39,6 +40,7 @@ Dependencies:
     SiPM_class.py
     sys
     os
+    fnmatch
 """
 
 # Check if a valid argument is given
@@ -56,8 +58,10 @@ if os.path.isdir(path):
     directory.histograms()  # Default arguments (compare_temp=True , compare_day=True)
 
 
-else:
+elif fnmatch.fnmatch(path, "*ARDU_*_dataframe.csv"):
     print("Provided a file path, analyzing...")
     single = sipm.Single(path)
     single.reader()
     single.analyzer()  # Default arguments: (room_f_start=0.75, ln2_f_start=1.55, peak_width=10, savepath=os.getcwd(), hide_progress=False)
+
+else: print("Please provide a valid path to a .csv file or directory")  
