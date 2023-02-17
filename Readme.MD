@@ -11,7 +11,7 @@ The project consists of two different assignments:
 ## Repository organization
 - **\Claro**: contains the code for the claro assignment, with "claro_main.py" being the final program to execute and "claro_class.py" containing all the classes definitions. Also contains the output file folder and a (smaller) folder of input files;
 - **\SiPM**: same structure as \Claro but with the input, output and code for the SiPM assignment;
-- ** OOP_Report.pdf**: IN ITALIAN, brief summary of the code usage and outputs.
+- **OOP_Report.pdf**: IN ITALIAN, brief summary of the code usage and outputs.
 
 
 ## Usage
