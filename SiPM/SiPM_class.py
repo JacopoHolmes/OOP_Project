@@ -22,7 +22,7 @@ class Single:
 
     Parameters:
     ----------
-    path (str): The file path of the Claro data file.
+    path (str): The file path of the SiPM data file.
 
     Attributes:
     ----------
